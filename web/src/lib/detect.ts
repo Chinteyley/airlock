@@ -44,6 +44,8 @@ const RELATIONS = 'sister|brother|son|daughter|wife|husband|mother|mom|father|da
 // One capitalized name word, with an apostrophe or inner capital ("O'Brien", "McDonald").
 const NAME_WORD = "\\p{Lu}['’]?\\p{Lu}?\\p{Ll}+(?:\\p{Lu}\\p{Ll}+)?"
 
+const UNIT = '(?:Apt|Apartment|Unit|Suite|Ste|Bldg|Building|Floor|Fl|Room|Rm)'
+
 const CREDENTIALS = 'MD|DO|PA-C|PA|NP|RN|LPN|PT|DPT|OT|PhD|PsyD|LCSW|LMFT|MSW|PHN|CNM|DNP|MS|CCC-SLP|SLP'
 
 const CITY_STATES = STATES.split('|')
@@ -74,10 +76,14 @@ const PATTERNS: Pattern[] = [
   // After the labeled record numbers, so "Medicaid ID 0039948217" stays a record.
   { kind: 'phone', re: /(?:\+\d{1,3}[\s.-]?)?\b\d{10,11}\b/g },
   { kind: 'address', re: new RegExp(`\\b\\d{1,6}\\s+(?:[A-Z][a-z]+\\s){1,3}(?:${STREET})\\b\\.?`, 'g') },
-  // A city right after a street address: "2231 Lakeshore Drive, Duluth".
+  // A city right after a street address: "2231 Lakeshore Drive, Duluth",
+  // skipping a unit ("77 Wabash Court, Apt 4B, Evanston").
   {
     kind: 'address',
-    re: new RegExp(`\\b\\d{1,6}\\s+(?:[A-Z][a-z]+\\s){1,3}(?:${STREET})\\b\\.?,[ \\t]+([A-Z][a-z]+(?: [A-Z][a-z]+)?)`, 'g'),
+    re: new RegExp(
+      `\\b\\d{1,6}\\s+(?:[A-Z][a-z]+\\s){1,3}(?:${STREET})\\b\\.?,[ \\t]+(?:${UNIT}\\.?[ \\t]+[A-Za-z0-9-]+,[ \\t]+)?(?!${UNIT}\\b)([A-Z][a-z]+(?: [A-Z][a-z]+)?)`,
+      'g',
+    ),
     group: 1,
   },
   // City before a state code: "Fresno, CA".
@@ -171,11 +177,14 @@ export function heldPattern(value: string, flags = 'gu'): RegExp {
   // in capitals, never in lowercase, so it can't swallow "low mood" or "don't";
   // three letters or fewer ("Ng", "Ed") only as written or title-cased, so it
   // can't swallow "NG tube" or "ED visits". Several words match in any case.
-  const single = words.length === 1
-  let variants = [value]
-  if (single && value.length <= 3) variants = [value, titleCase(value)]
-  else if (single) variants = [value, value.toUpperCase(), titleCase(value)]
-  const alternatives = [...new Set(variants)].map(body)
+  // Record numbers, emails and other tokens with digits or punctuation match in any case.
+  const single = words.length === 1 && /^\p{L}+$/u.test(value.trim())
+  // An all-caps name ("MCDONALD") also matches its usual spelling ("McDonald").
+  const capsRest = (w: string) => `${escapeRe(w[0])}(?i:${escapeRe(w.slice(1))})`
+  let alternatives: string[]
+  if (single && value.length <= 3) alternatives = [...new Set([value, titleCase(value)])].map(body)
+  else if (single) alternatives = [body(value), capsRest(value.toUpperCase())]
+  else alternatives = [body(value)]
   const f = single ? flags : `${flags}i`
   return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}_]|['’]t\\b)`, f)
 }

@@ -173,6 +173,20 @@ describe('third review', () => {
 })
 
 describe('round three', () => {
+  test('record numbers match in any case; all-caps names match their usual spelling', () => {
+    expect(findLeaks('confirm bcx99210374 on forms', ['BCX99210374'])).toEqual(['bcx99210374'])
+    expect(findLeaks('McDonald reports pain', ['MCDONALD'])).toEqual(['mcdonald'])
+    expect(findLeaks('a mcdonald burger', ['MCDONALD'])).toEqual([])
+  })
+
+  test('a unit after a street is not read as a city', () => {
+    const found = findPatterns('77 Wabash Court, Apt 4B, Evanston, IL 60201. 410 Fremont Avenue, Unit 12, Sacramento.').map((s) => s.text)
+    expect(found).not.toContain('Apt')
+    expect(found).not.toContain('Unit')
+    expect(found).toContain('Evanston')
+    expect(found).toContain('Sacramento')
+  })
+
   test('a held date lends no words to the task line', () => {
     const text = 'Seen November 18, 2026.'
     const { lookup } = redact(text, mergeSpans(findPatterns(text), text))
