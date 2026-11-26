@@ -6,7 +6,7 @@ import { kindName } from '../lib/kinds'
 import type { Policy } from '../firebase'
 import { saveDraft, sha256 } from '../history'
 import type { Span } from '../lib/detect'
-import { findPatterns, mergeSpans, nameParts, PERSON_KINDS, spansFromEntities } from '../lib/detect'
+import { findPatterns, mergeSpans, nameParts, PERSON_KINDS, placeParts, spansFromEntities } from '../lib/detect'
 import { TOKEN_RE } from '../lib/vault'
 import type { VaultEntry } from '../lib/vault'
 import { findLeaks, redact, restore, sealText } from '../lib/vault'
@@ -26,10 +26,10 @@ interface Sent {
 
 type Saved = { state: 'saving' } | { state: 'saved' } | { state: 'failed'; error: string }
 
-// Checks the user's text in each captured body on its own (Airlock's fixed
-// wording is left out, so a held "Will" isn't matched in "you will never see").
-function leaksIn(wire: WireRecord[], values: string[], instructions: string): string[] {
-  return [...new Set(wire.flatMap((w) => findLeaks(userTextOf(w.body, instructions), values)))]
+// Checks each captured body on its own, without Airlock's fixed template (so a
+// held "Will" isn't matched in "you will never see").
+function leaksIn(wire: WireRecord[], values: string[]): string[] {
+  return [...new Set(wire.flatMap((w) => findLeaks(userTextOf(w.body), values)))]
 }
 
 const PROPER_NOUN = /(?:^|\s)\p{Lu}/u
@@ -66,9 +66,11 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   const [spans, setSpans] = useState<Span[]>([])
   const [scanMs, setScanMs] = useState(0)
   const [sealed, setSealed] = useState(false)
-  const [reviewed, setReviewed] = useState(false)
+  const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null)
   const [selection, setSelection] = useState('')
   const [sent, setSent] = useState<Sent | null>(null)
+  // A cloud attempt that failed with no on-device fallback, kept as evidence.
+  const [attempt, setAttempt] = useState<WireRecord | null>(null)
   const [saved, setSaved] = useState<Saved | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showRestored, setShowRestored] = useState(true)
@@ -76,9 +78,9 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   const run = useRef(0)
 
   const redaction = useMemo(() => redact(note, spans), [note, spans])
-  // Every held string, plus each part of a held name, is searched for in what goes out.
+  // Every held string, plus each part of a held name or place, is searched for in what goes out.
   const heldValues = useMemo(
-    () => [...new Set(spans.flatMap((s) => [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])]))],
+    () => [...new Set(spans.flatMap((s) => [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : placeParts(s.text))]))],
     [spans],
   )
   const kindCounts = useMemo(() => {
@@ -93,11 +95,13 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
     () => buildDraftPrompt(redaction.redacted, sealedTask, policy.draftInstructions),
     [policy, redaction, sealedTask],
   )
-  // Only the user's text is checked; Airlock's fixed wording names no one.
+  // Everything but Airlock's fixed template is checked: instructions, task and note.
   const preflightLeaks = useMemo(
-    () => findLeaks(`${redaction.redacted}\n${sealedTask}`, heldValues),
-    [redaction, sealedTask, heldValues],
+    () => findLeaks(`${policy.draftInstructions}\n${redaction.redacted}\n${sealedTask}`, heldValues),
+    [policy, redaction, sealedTask, heldValues],
   )
+  // A manual review confirms one exact prompt; any change asks for it again.
+  const reviewed = reviewedPrompt === outbound
 
   const pickFixture = (id: string) => {
     const f = FIXTURES.find((x) => x.id === id)
@@ -113,9 +117,10 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
     setPhase('edit')
     setSpans([])
     setSent(null)
+    setAttempt(null)
     setSaved(null)
     setError(null)
-    setReviewed(false)
+    setReviewedPrompt(null)
     setSelection('')
   }
 
@@ -138,11 +143,12 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
     }
   }
 
-  // Releasing a name also releases its parts held elsewhere ("Maria" with "Maria Delgado").
+  // Releasing a name also releases its parts held elsewhere in the same role
+  // ("Maria" with "Maria Delgado"), never another person's.
   const release = (s: Span) => {
     if (phase !== 'review') return
     const gone = new Set([s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])].map((t) => t.toLowerCase()))
-    setSpans((all) => all.filter((x) => !gone.has(x.text.toLowerCase())))
+    setSpans((all) => all.filter((x) => !(x.kind === s.kind && gone.has(x.text.toLowerCase()))))
   }
 
   const holdSelection = () => {
@@ -173,9 +179,12 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
         return
       }
       const since = lastWireId()
-      const draft = await draftLetter(outbound, policy.draftModel)
+      const draft = await draftLetter(outbound, policy.draftModel).catch((e: unknown) => {
+        setAttempt(wireSince(since).at(-1) ?? null)
+        throw e
+      })
       const wire = wireSince(since)
-      const leaks = leaksIn(wire, heldValues, policy.draftInstructions)
+      const leaks = leaksIn(wire, heldValues)
       if (thisRun !== run.current) return
       setSent({ draft, entries, wire, leaks })
       setPhase('done')
@@ -212,7 +221,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   }
 
   const canSend = phase === 'review' && preflightLeaks.length === 0 && (!sealed || reviewed)
-  const lastWire = sent?.wire.at(-1)
+  const lastWire = sent?.wire.at(-1) ?? attempt ?? undefined
 
   return (
     <div className="stage">
@@ -351,7 +360,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
               )}
               {sealed && phase === 'review' && (
                 <label className="row muted">
-                  <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />I read the
+                  <input type="checkbox" checked={reviewed} onChange={(e) => setReviewedPrompt(e.target.checked ? outbound : null)} />I read the
                   prompt above, and it names no one.
                 </label>
               )}

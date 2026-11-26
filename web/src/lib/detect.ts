@@ -140,9 +140,16 @@ const WORD_NAMES = new Set(
 export function heldPattern(value: string, flags = 'gu'): RegExp {
   const words = value.trim().split(/\s+/)
   const body = (v: string) => v.trim().split(/\s+/).map(escapeRe).join('\\s+')
-  const wordName = words.length === 1 && WORD_NAMES.has(value.toLowerCase())
-  const alternatives = wordName ? [...new Set([value, value.toUpperCase(), titleCase(value)])].map(body) : [body(value)]
-  const f = wordName ? flags : `${flags}i`
+  const single = words.length === 1
+  // Short parts ("Ng", "Bo") are matched as written or title-cased only, so a
+  // surname never swallows an abbreviation like "NG tube".
+  const short = single && value.length <= 3
+  const wordName = single && WORD_NAMES.has(value.toLowerCase())
+  let variants = [value]
+  if (short) variants = [value, titleCase(value)]
+  else if (wordName) variants = [value, value.toUpperCase(), titleCase(value)]
+  const alternatives = [...new Set(variants)].map(body)
+  const f = short || wordName ? flags : `${flags}i`
   return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}_])`, f)
 }
 

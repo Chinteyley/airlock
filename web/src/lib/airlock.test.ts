@@ -122,6 +122,26 @@ describe('second review', () => {
   })
 })
 
+describe('third review', () => {
+  const hold = (text: string, entities: { text: string; kind: string }[]) =>
+    redact(text, mergeSpans(expandSpans(text, [...findPatterns(text), ...spansFromEntities(text, entities)]), text))
+
+  test('a short surname never swallows an abbreviation', () => {
+    const { redacted } = hold('Patient Alex Ng. Continue NG tube feeds overnight. Ng agrees.', [{ text: 'Alex Ng', kind: 'patient' }])
+    expect(redacted).toBe('Patient [PATIENT_1]. Continue NG tube feeds overnight. [PATIENT_1] agrees.')
+  })
+
+  test('sealing the task keeps word names case-sensitive', () => {
+    const { lookup } = hold('Will Carter was seen today.', [{ text: 'Will Carter', kind: 'patient' }])
+    expect(sealText('The clinic will call Will', lookup)).toBe('The clinic will call [PATIENT_1]')
+  })
+
+  test('a distinctive word of a held place is sealed in the task', () => {
+    const { lookup } = hold('Admitted to Riverbend Medical Center.', [{ text: 'Riverbend Medical Center', kind: 'organization' }])
+    expect(sealText('Refer back to riverbend', lookup)).toBe('Refer back to [ORG_1]')
+  })
+})
+
 describe('leak scan', () => {
   test('matches whole words as written, in capitals or title case, inside JSON strings', () => {
     expect(findLeaks('{"text":"James played games"}', ['Ames'])).toEqual([])

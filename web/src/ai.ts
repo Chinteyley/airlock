@@ -174,10 +174,9 @@ export async function draftLetter(prompt: string, model: string): Promise<Draft>
   }
 }
 
-// The parts of a captured request body the user wrote (the sealed task and the
-// redacted note), without Airlock's own fixed wording, which is what the leak
-// scan should read.
-export function userTextOf(body: string, instructions: string): string {
+// The text of a captured request body without Airlock's own fixed template,
+// which is what the leak scan should read.
+export function userTextOf(body: string): string {
   let text = body
   try {
     const parsed: unknown = JSON.parse(body)
@@ -186,5 +185,6 @@ export function userTextOf(body: string, instructions: string): string {
   } catch {
     // Not JSON: scan the raw body.
   }
-  return text.replace(instructions, '').replace(PREAMBLE, '')
+  // Only Airlock's own template is skipped; Remote Config instructions are scanned too.
+  return text.replace(PREAMBLE, '').replace('De-identified note:', '').replace('Task:', '')
 }

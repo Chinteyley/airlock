@@ -3,7 +3,7 @@
 // restoring never depends on a model getting it right.
 
 import type { Kind, Span } from './detect'
-import { heldPattern, nameParts, PERSON_KINDS } from './detect'
+import { heldPattern, nameParts, PERSON_KINDS, placeParts } from './detect'
 
 const LABEL: Record<Kind, string> = {
   patient: 'PATIENT',
@@ -107,11 +107,26 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
   out += text.slice(at)
   // Parts of a held name that belong to exactly one held name of the same role
   // seal to that name's token wherever else they turn up (the task line, say).
-  for (const [part, owners] of partOwners) {
-    const owner = owners.size === 1 ? byValue.get([...owners][0]) : undefined
-    if (owner && !byValue.has(part) && PERSON_KINDS.has(owner.kind)) byValue.set(part, owner)
+  // Parts of a held name or place that belong to exactly one held value seal
+  // to that value's token wherever else they turn up (the task line, say).
+  // Values keep their original casing, so sealing uses the same matching as holding.
+  const original = new Map<string, string>()
+  const partOf = new Map<string, Set<string>>()
+  for (const s of spans) {
+    original.set(key(s.text), s.text)
+    const parts = PERSON_KINDS.has(s.kind) ? nameParts(s.text) : placeParts(s.text)
+    for (const p of parts) {
+      if (!original.has(key(p))) original.set(key(p), p)
+      const owners = partOf.get(key(p)) ?? new Set<string>()
+      owners.add(key(s.text))
+      partOf.set(key(p), owners)
+    }
   }
-  const lookup = [...byValue].map(([v, e]): [string, string] => [v, e.token])
+  for (const [part, owners] of partOf) {
+    const owner = owners.size === 1 ? byValue.get([...owners][0]) : undefined
+    if (owner && !byValue.has(part)) byValue.set(part, owner)
+  }
+  const lookup = [...byValue].map(([k, e]): [string, string] => [original.get(k) ?? e.value, e.token])
   return { redacted: out, entries, lookup }
 }
 

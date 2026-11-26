@@ -31,7 +31,7 @@ Code: [`web/src/ai.ts`](web/src/ai.ts) (models), [`web/src/lib/detect.ts`](web/s
 - **Firebase AI Logic** (Gemini Developer API) with hybrid inference on Chrome's Prompt API (Gemini Nano).
 - **App Check**, enforced for AI Logic: Fraud Defense (reCAPTCHA Enterprise) on the hosted app, the debug provider in local development.
 - **Authentication**: anonymous sign-in scopes each user's history.
-- **Cloud Firestore**: stores the redacted note and the letter as the cloud wrote it, tokens and all: the same text that already went to the cloud, nothing more. Before writing, Airlock scans the record for every held value and refuses to store it if one is found. Security rules allow each user only their own records, only the redacted fields, and only records with zero leaked values.
+- **Cloud Firestore**: stores the redacted note and the letter as the cloud wrote it, tokens and all: the same text that already went to the cloud, nothing more. Before writing, the app scans the record for every held value and refuses to store it if one is found (a client-side guard). Security rules enforce ownership, the schema and field sizes, and reject any record that reports a leaked value.
 - **Remote Config**: the policy name, the cloud drafting model and the drafting instructions, so an organization can change them without a release.
 - **Hosting**: https://airlock-hybrid-2026.web.app.
 
