@@ -83,7 +83,7 @@ struct AuditScreen: View {
     defer { running = false }
     for f in fixtures {
       let truth = f.identifiers.map(\.text)
-      let patternOnly = redact(f.text, spans: mergeSpans(findPatterns(f.text), in: f.text)).redacted
+      let patternOnly = redact(f.text, spans: patternSpans(f.text)).redacted
       do {
         let s = try await scan(f.text)
         let redacted = redact(f.text, spans: s.spans).redacted
