@@ -1,0 +1,9 @@
+{
+  "firestore": { "rules": "firestore.rules" },
+  "remoteconfig": { "template": "remoteconfig.template.json" },
+  "hosting": {
+    "public": "web/dist",
+    "ignore": ["firebase.json", "**/.*"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  }
+}

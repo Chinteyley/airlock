@@ -1,0 +1,10 @@
+node_modules
+dist
+.firebase
+*.local
+.DS_Store
+*.log
+xcuserdata
+DerivedData
+*.xcuserstate
+build

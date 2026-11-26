@@ -1,0 +1,19 @@
+{
+  "parameters": {
+    "policy_name": {
+      "defaultValue": { "value": "HIPAA Safe Harbor" },
+      "description": "Name of the de-identification policy shown in the app.",
+      "valueType": "STRING"
+    },
+    "draft_model": {
+      "defaultValue": { "value": "gemini-3.5-flash-lite" },
+      "description": "Cloud model that drafts letters from redacted notes.",
+      "valueType": "STRING"
+    },
+    "draft_instructions": {
+      "defaultValue": { "value": "Write a concise, professional referral letter from the note author to the receiving service. Include the reason for referral, relevant history, current treatment, risks, and the specific ask. Plain text, no markdown." },
+      "description": "Drafting instructions sent with every redacted note.",
+      "valueType": "STRING"
+    }
+  }
+}

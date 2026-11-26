@@ -1,0 +1,211 @@
+import { describe, expect, test } from 'bun:test'
+import fixtures from '../../../fixtures/notes.json'
+import { expandSpans, findPatterns, mergeSpans, spansFromEntities } from './detect'
+import { findLeaks, redact, restore, sealText } from './vault'
+
+const NOTE = 'Patient: Maria Delgado, DOB 03/14/1972, cell 559-204-8817. Maria lives with Tomas Delgado in Fresno, CA 93721.'
+
+describe('patterns', () => {
+  test('find structured identifiers and tag a birth date', () => {
+    const kinds = Object.fromEntries(findPatterns(NOTE).map((s) => [s.text, s.kind]))
+    expect(kinds['03/14/1972']).toBe('dob')
+    expect(kinds['559-204-8817']).toBe('phone')
+    expect(kinds.Fresno).toBe('address')
+    expect(kinds['93721']).toBe('address')
+  })
+})
+
+describe('vault', () => {
+  const spans = mergeSpans([
+    ...findPatterns(NOTE),
+    ...spansFromEntities(NOTE, [
+      { text: 'Maria Delgado', kind: 'patient' },
+      { text: 'Tomas Delgado', kind: 'relative' },
+    ]),
+  ], NOTE)
+  const today = new Date(2026, 10, 26)
+  const { redacted, entries } = redact(NOTE, spans, today)
+
+  test('redacted text holds no held value, and keeps an age instead of the birth date', () => {
+    expect(findLeaks(redacted, spans.map((s) => s.text))).toEqual([])
+    expect(redacted).toContain('[DOB_1] (age 54)')
+  })
+
+  test('a lone first name shares the token of the held full name it belongs to', () => {
+    const maria = entries.find((e) => e.value === 'Maria Delgado')
+    expect(redacted).toContain(`${maria?.token} lives`)
+  })
+
+  test('restore swaps tokens back and reports tokens it never issued', () => {
+    const r = restore(`${redacted} See [PATIENT_9].`, entries)
+    expect(r.text).toContain('Maria Delgado, DOB 03/14/1972')
+    expect(r.unknown).toEqual(['[PATIENT_9]'])
+  })
+})
+
+describe('review findings', () => {
+  test('overlapping detections become one held span, so no detector can shrink another', () => {
+    const text = 'Dr. Jonathan Michaels\nAlice McDonald-SMITH called.'
+    const spans = mergeSpans(
+      [...findPatterns(text), ...spansFromEntities(text, [{ text: 'Alice McDonald-SMITH', kind: 'person' }])],
+      text,
+    )
+    const { redacted } = redact(text, spans)
+    expect(findLeaks(redacted, ['Jonathan Michaels', 'Alice McDonald-SMITH', 'McDonald-SMITH'])).toEqual([])
+  })
+
+  test('a held name typed into the task line is sealed before it can be sent', () => {
+    const spans = mergeSpans(spansFromEntities(NOTE, [{ text: 'Maria Delgado', kind: 'patient' }]), NOTE)
+    const { lookup } = redact(NOTE, spans)
+    expect(sealText('Refer MARIA DELGADO; Maria Delgado agrees', lookup)).toBe('Refer [PATIENT_1]; [PATIENT_1] agrees')
+  })
+
+  test('a name part of a different role keeps its own token', () => {
+    const text = 'Alice Jones attended with her sister Alice.'
+    const spans = mergeSpans(
+      [...findPatterns(text), ...spansFromEntities(text, [{ text: 'Alice Jones', kind: 'patient' }])],
+      text,
+    )
+    const { redacted } = redact(text, spans)
+    expect(redacted).toBe('[PATIENT_1] attended with her sister [RELATIVE_1].')
+  })
+
+  test('patterns catch bare ten-digit phones and day-month-year dates', () => {
+    const found = findPatterns('Cell: 4155550123. DOB 14 March 1972.').map((s) => [s.text, s.kind])
+    expect(found).toContainEqual(['4155550123', 'phone'])
+    expect(found).toContainEqual(['14 March 1972', 'dob'])
+  })
+})
+
+describe('case and line wraps', () => {
+  test('a held name is held in capitals and across a line break', () => {
+    const text = 'Pt Maria Delgado. Spoke with MARIA by phone. Seen with Maria\nDelgado.'
+    const spans = mergeSpans(spansFromEntities(text, [{ text: 'Maria Delgado', kind: 'patient' }]), text)
+    const { redacted } = redact(text, spans)
+    expect(redacted).toBe('Pt [PATIENT_1]. Spoke with [PATIENT_1] by phone. Seen with [PATIENT_1].')
+  })
+
+  test('a signature name before a credential is held', () => {
+    const found = findPatterns('Jordan Price, PT, DPT, Harborview Motion. Signed: Ana Lucía Gómez, MS, CCC-SLP').map((s) => s.text)
+    expect(found).toContain('Jordan Price')
+    expect(found).toContain('Ana Lucía Gómez')
+  })
+
+  test('a city right after a street address is held', () => {
+    expect(findPatterns('from home (2231 Lakeshore Drive, Duluth).').map((s) => s.text)).toContain('Duluth')
+  })
+
+  test('a clinician with a credential is not read as a city', () => {
+    expect(findPatterns('Alan Whitcomb, MD').filter((s) => s.kind === 'address')).toEqual([])
+  })
+})
+
+describe('second review', () => {
+  const hold = (text: string, entities: { text: string; kind: string }[]) =>
+    redact(text, mergeSpans(expandSpans(text, [...findPatterns(text), ...spansFromEntities(text, entities)]), text))
+
+  test('capitals, title case and mixed-case full names are held too', () => {
+    const { redacted } = hold('Patient: Maria Delgado. MARIA reports pain. Seen at DaVita Riverbend (davita riverbend).', [
+      { text: 'Maria Delgado', kind: 'patient' },
+      { text: 'DaVita Riverbend', kind: 'organization' },
+    ])
+    expect(redacted).toBe('Patient: [PATIENT_1]. [PATIENT_1] reports pain. Seen at [ORG_1] ([ORG_1]).')
+  })
+
+  test('a lone single word is never matched in lowercase, so names can’t swallow everyday words', () => {
+    const { redacted } = hold("Don Miller, Amy Low. Don can't sleep; he don't eat; low mood. Two ED visits; Ed Wong saw him.", [
+      { text: 'Don Miller', kind: 'patient' },
+      { text: 'Amy Low', kind: 'relative' },
+      { text: 'Ed Wong', kind: 'clinician' },
+    ])
+    expect(redacted).toContain("he don't eat; low mood. Two ED visits")
+  })
+
+  test('two-letter names and each half of a hyphenated surname are held', () => {
+    const { redacted } = hold('Bo Chen saw Dr. Patel-Ramos. Bo agreed; Ramos will call.', [
+      { text: 'Bo Chen', kind: 'patient' },
+      { text: 'Patel-Ramos', kind: 'clinician' },
+    ])
+    expect(redacted).not.toMatch(/\bBo\b|Ramos/)
+  })
+
+  test('a value patterns found once is held everywhere it appears', () => {
+    const { redacted } = hold('Lives with her husband Tomas. Safety plan reviewed with Tomas.', [])
+    expect(redacted).toBe('Lives with her husband [RELATIVE_1]. Safety plan reviewed with [RELATIVE_1].')
+  })
+
+  test('a held word never matches inside a token', () => {
+    const { redacted, lookup } = hold('Visit 11/24/2026. Patient: Kenji Date.', [{ text: 'Kenji Date', kind: 'patient' }])
+    // A surname that only turns up in the task has no token yet, so the preflight blocks it.
+    expect(sealText('Follow up on 11/24/2026 with Kenji', lookup)).toBe('Follow up on [DATE_1] with [PATIENT_1]')
+    expect(findLeaks(sealText('with Date', lookup), ['Date'])).toEqual(['date'])
+    expect(findLeaks(redacted, ['Date', 'Kenji Date'])).toEqual([])
+  })
+})
+
+describe('third review', () => {
+  const hold = (text: string, entities: { text: string; kind: string }[]) =>
+    redact(text, mergeSpans(expandSpans(text, [...findPatterns(text), ...spansFromEntities(text, entities)]), text))
+
+  test('a short surname never swallows an abbreviation', () => {
+    const { redacted } = hold('Patient Alex Ng. Continue NG tube feeds overnight. Ng agrees.', [{ text: 'Alex Ng', kind: 'patient' }])
+    expect(redacted).toBe('Patient [PATIENT_1]. Continue NG tube feeds overnight. [PATIENT_2] agrees.')
+  })
+
+  test('a lone surname gets its own token, so relatives who share it restore correctly', () => {
+    const { redacted, entries } = hold('Ethan Okafor, 7, seen with his mother Grace Okafor. Okafor family agrees.', [
+      { text: 'Ethan Okafor', kind: 'patient' },
+      { text: 'Grace Okafor', kind: 'relative' },
+    ])
+    const restored = restore(redacted, entries).text
+    expect(restored).toBe('Ethan Okafor, 7, seen with his mother Grace Okafor. Okafor family agrees.')
+  })
+
+  test('sealing the task keeps word names case-sensitive', () => {
+    const { lookup } = hold('Will Carter was seen today.', [{ text: 'Will Carter', kind: 'patient' }])
+    expect(sealText('The clinic will call Will', lookup)).toBe('The clinic will call [PATIENT_1]')
+  })
+
+  test('a distinctive word of a held place is sealed in the task', () => {
+    const { lookup } = hold('Admitted to Riverbend Medical Center.', [{ text: 'Riverbend Medical Center', kind: 'organization' }])
+    expect(sealText('Refer back to Riverbend', lookup)).toBe('Refer back to [ORG_1]')
+  })
+})
+
+describe('round three', () => {
+  test('record numbers match in any case; all-caps names match their usual spelling', () => {
+    expect(findLeaks('confirm bcx99210374 on forms', ['BCX99210374'])).toEqual(['bcx99210374'])
+    expect(findLeaks('McDonald reports pain', ['MCDONALD'])).toEqual(['mcdonald'])
+    expect(findLeaks('a mcdonald burger', ['MCDONALD'])).toEqual([])
+  })
+
+  test('a unit after a street is not read as a city', () => {
+    const found = findPatterns('77 Wabash Court, Apt 4B, Evanston, IL 60201. 410 Fremont Avenue, Unit 12, Sacramento.').map((s) => s.text)
+    expect(found).not.toContain('Apt')
+    expect(found).not.toContain('Unit')
+    expect(found).toContain('Evanston')
+    expect(found).toContain('Sacramento')
+  })
+
+  test('a held date lends no words to the task line', () => {
+    const text = 'Seen November 18, 2026.'
+    const { lookup } = redact(text, mergeSpans(findPatterns(text), text))
+    expect(sealText('before November ends', lookup)).toBe('before November ends')
+  })
+})
+
+describe('leak scan', () => {
+  test('matches whole words as written, in capitals or title case, inside JSON strings', () => {
+    expect(findLeaks('{"text":"James played games"}', ['Ames'])).toEqual([])
+    expect(findLeaks('{"text":"lives in AMES"}', ['Ames'])).toEqual(['ames'])
+    expect(findLeaks('{"text":"you will never see"}', ['Will'])).toEqual([])
+    expect(findLeaks('{"text":"Seen with Maria\\nDelgado"}', ['Maria Delgado'])).toEqual(['maria delgado'])
+    expect(findLeaks('{"text":"St. Brigid Children\\u0027s Hospital"}', ["St. Brigid Children's Hospital"])).toHaveLength(1)
+  })
+})
+
+describe('fixtures', () => {
+  test('every labeled identifier appears in its note', () => {
+    for (const n of fixtures.notes) for (const i of n.identifiers) expect(n.text).toContain(i.text)
+  })
+})
