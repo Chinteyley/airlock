@@ -117,7 +117,11 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
   for (const s of spans) {
     original.set(key(s.text), s.text)
     if (s.source === 'manual') continue
-    const parts = PERSON_KINDS.has(s.kind) ? nameParts(s.text).slice(0, 1) : placeParts(s.text)
+    const parts = PERSON_KINDS.has(s.kind)
+      ? nameParts(s.text).slice(0, 1)
+      : s.kind === 'organization' || s.kind === 'address'
+        ? placeParts(s.text)
+        : []
     for (const p of parts) {
       if (!original.has(key(p))) original.set(key(p), p)
       const owners = partOf.get(key(p)) ?? new Set<string>()

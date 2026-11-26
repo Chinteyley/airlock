@@ -32,7 +32,7 @@ export async function sha256(text: string): Promise<string> {
 // Refuses to write a record whose text contains any held value.
 export async function saveDraft(record: DraftRecord, heldValues: string[]): Promise<string> {
   if (record.leaked > 0) throw new Error('Not stored: the captured request contained a held value.')
-  const leaks = findLeaks([record.redactedNote, record.redactedLetter].join('\n'), heldValues)
+  const leaks = findLeaks([record.title, record.redactedNote, record.redactedLetter].join('\n'), heldValues)
   if (leaks.length > 0) throw new Error(`Refusing to store: ${leaks.length} held values found in the record.`)
   const user = await ensureAuth()
   const ref = await addDoc(collection(db, 'users', user.uid, 'drafts'), { ...record, createdAt: serverTimestamp() })

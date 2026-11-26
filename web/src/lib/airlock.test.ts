@@ -172,6 +172,14 @@ describe('third review', () => {
   })
 })
 
+describe('round three', () => {
+  test('a held date lends no words to the task line', () => {
+    const text = 'Seen November 18, 2026.'
+    const { lookup } = redact(text, mergeSpans(findPatterns(text), text))
+    expect(sealText('before November ends', lookup)).toBe('before November ends')
+  })
+})
+
 describe('leak scan', () => {
   test('matches whole words as written, in capitals or title case, inside JSON strings', () => {
     expect(findLeaks('{"text":"James played games"}', ['Ames'])).toEqual([])

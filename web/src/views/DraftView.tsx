@@ -32,6 +32,15 @@ function leaksIn(wire: WireRecord[], values: string[]): string[] {
   return [...new Set(wire.flatMap((w) => findLeaks(userTextOf(w.body), values)))]
 }
 
+function norm(t: string) {
+  return t.toLowerCase().replace(/\s+/g, ' ')
+}
+
+// The sample's title, unless it names something held ("VA primary care" with "VA" held).
+function titleFor(title: string | undefined, held: string[]): string {
+  return title && findLeaks(title, held).length === 0 ? title : 'Referral letter'
+}
+
 const TASK_KINDS = new Set(['patient', 'relative', 'clinician', 'person', 'place'])
 
 // People, places, numbers and dates typed into the task line that the note
@@ -45,7 +54,8 @@ async function unheldInTask(sealedTask: string, deviceReady: boolean): Promise<s
       ...entities
         .filter((e) => TASK_KINDS.has(e.kind))
         .map((e) => e.text.trim())
-        .filter((t) => t.length > 1 && plain.toLowerCase().includes(t.toLowerCase())),
+        // A name has a capital somewhere; "orthopedic surgeon" is a role, not a name.
+        .filter((t) => t.length > 1 && /\p{Lu}/u.test(t) && plain.toLowerCase().includes(t.toLowerCase())),
     )
   }
   return [...new Set(found)]
@@ -82,25 +92,42 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   const [showRestored, setShowRestored] = useState(true)
   // Values the clinician released; they stay released even where a held name contains them.
   const [released, setReleased] = useState<Set<string>>(new Set())
+  // Values a wider manual hold swallowed ("00-4417-82" inside "Chart number
+  // 00-4417-82"), mapped to the hold that now contains them.
+  const [absorbed, setAbsorbed] = useState<Map<string, string>>(new Map())
   // Bumped on every send and reset, so a late history save can't update a newer draft.
   const run = useRef(0)
 
+  // A released value stays released unless it is still held in its own right.
+  const stillHeld = useMemo(() => new Set(spans.map((s) => norm(s.text))), [spans])
+  const isReleased = useMemo(
+    () => (v: string) => released.has(norm(v)) && !stillHeld.has(norm(v)),
+    [released, stillHeld],
+  )
   const redaction = useMemo(() => {
     const r = redact(note, spans)
-    return { ...r, lookup: r.lookup.filter(([v]) => !released.has(v.toLowerCase())) }
-  }, [note, spans, released])
+    const tokenOf = new Map(r.lookup.map(([v, t]) => [norm(v), t]))
+    const extra = [...absorbed].flatMap(([v, container]): [string, string][] => {
+      const t = tokenOf.get(norm(container))
+      return t ? [[v, t]] : []
+    })
+    return { ...r, lookup: [...r.lookup, ...extra].filter(([v]) => !isReleased(v)) }
+  }, [note, spans, isReleased, absorbed])
   // Every held string, plus each part of a held name or place, is searched for in what goes out.
   const heldValues = useMemo(
     () =>
       [
-        ...new Set(
-          spans.flatMap((s) => {
+        ...new Set([
+          ...spans.flatMap((s) => {
             if (s.source === 'manual') return [s.text]
-            return [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : placeParts(s.text))]
+            if (PERSON_KINDS.has(s.kind)) return [s.text, ...nameParts(s.text)]
+            if (s.kind === 'organization' || s.kind === 'address') return [s.text, ...placeParts(s.text)]
+            return [s.text]
           }),
-        ),
-      ].filter((v) => !released.has(v.toLowerCase())),
-    [spans, released],
+          ...absorbed.keys(),
+        ]),
+      ].filter((v) => !isReleased(v)),
+    [spans, isReleased, absorbed],
   )
   const kindCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -136,6 +163,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
     setPhase('edit')
     setSpans([])
     setReleased(new Set())
+    setAbsorbed(new Map())
     setSent(null)
     setAttempt(null)
     setSaved(null)
@@ -164,11 +192,13 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   }
 
   // Releasing a name also releases its parts held elsewhere in the same role
-  // ("Maria" with "Maria Delgado"), never another person's.
+  // ("Maria" with "Maria Delgado"), but never a part another held name shares.
   const release = (s: Span) => {
     if (phase !== 'review') return
-    const norm = (t: string) => t.toLowerCase().replace(/\s+/g, ' ')
-    const gone = new Set([s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])].map(norm))
+    const others = spans.filter((x) => norm(x.text) !== norm(s.text) && PERSON_KINDS.has(x.kind))
+    const shared = new Set(others.flatMap((x) => nameParts(x.text)).map(norm))
+    const parts = PERSON_KINDS.has(s.kind) ? nameParts(s.text).map(norm).filter((p) => !shared.has(p)) : []
+    const gone = new Set([norm(s.text), ...parts])
     setSpans((all) => all.filter((x) => !(x.kind === s.kind && gone.has(norm(x.text)))))
     setReleased((r) => new Set([...r, ...gone]))
   }
@@ -176,7 +206,12 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   const holdSelection = () => {
     const value = selection.trim()
     if (!value) return
-    setSpans((all) => mergeSpans([...all, ...spansFromEntities(note, [{ text: value, kind: 'person' }], 'manual')], note))
+    const held = spansFromEntities(note, [{ text: value, kind: 'person' }], 'manual')
+    // Values the new hold swallows stay checked, sealed to the new hold's token.
+    const swallowed = spans.filter((s) => held.some((h) => s.start >= h.start && s.end <= h.end && s.text !== h.text))
+    setAbsorbed((a) => new Map([...a, ...swallowed.map((s): [string, string] => [s.text, value])]))
+    setReleased((r) => new Set([...r].filter((v) => v !== norm(value))))
+    setSpans((all) => mergeSpans([...all, ...held], note))
     setSelection('')
     window.getSelection()?.removeAllRanges()
   }
@@ -216,7 +251,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
         const payload = wire.map((w) => w.body).join('\n')
         await saveDraft(
           {
-            title: FIXTURES.find((f) => f.id === fixtureId && f.text === note)?.title ?? 'Referral letter',
+            title: titleFor(FIXTURES.find((f) => f.id === fixtureId && f.text === note)?.title, heldValues),
             platform: 'web',
             redactedNote: redaction.redacted,
             redactedLetter: draft.text,
