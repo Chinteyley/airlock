@@ -10,7 +10,14 @@ service cloud.firestore {
         && request.resource.data.redactedNote is string
         && request.resource.data.redactedNote.size() < 20000
         && request.resource.data.redactedLetter is string
-        && request.resource.data.redactedLetter.size() < 20000;
+        && request.resource.data.redactedLetter.size() < 20000
+        && request.resource.data.title is string
+        && request.resource.data.platform in ['web', 'ios']
+        && request.resource.data.held is int
+        && request.resource.data.leaked is int
+        && request.resource.data.detectedOn in ['on-device', 'patterns-only']
+        && request.resource.data.draftedOn in ['IN_CLOUD', 'ON_DEVICE']
+        && request.resource.data.createdAt == request.time;
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
   }

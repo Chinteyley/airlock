@@ -30,10 +30,10 @@ export interface Scan {
 export async function scan(note: string, deviceReady: boolean): Promise<Scan> {
   const t0 = performance.now()
   const pattern = findPatterns(note)
-  if (!deviceReady) return { spans: mergeSpans(pattern), onDevice: false, ms: Math.round(performance.now() - t0) }
+  if (!deviceReady) return { spans: mergeSpans(pattern, note), onDevice: false, ms: Math.round(performance.now() - t0) }
   const entities = await detectOnDevice(note)
   return {
-    spans: mergeSpans([...pattern, ...spansFromEntities(note, entities)]),
+    spans: mergeSpans([...pattern, ...spansFromEntities(note, entities)], note),
     onDevice: true,
     ms: Math.round(performance.now() - t0),
   }
@@ -54,7 +54,7 @@ export interface AuditRow {
 // sent to the cloud, with patterns alone and with the full on-device scan.
 export async function auditFixture(f: Fixture): Promise<AuditRow> {
   const truth = f.identifiers.map((i) => i.text)
-  const patternOnly = redact(f.text, mergeSpans(findPatterns(f.text))).redacted
+  const patternOnly = redact(f.text, mergeSpans(findPatterns(f.text), f.text)).redacted
   const s = await scan(f.text, true)
   const { redacted, entries } = redact(f.text, s.spans)
   return {

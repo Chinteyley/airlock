@@ -100,6 +100,9 @@ function isEntity(x: unknown): x is ModelEntity {
 }
 
 export async function detectOnDevice(note: string): Promise<ModelEntity[]> {
+  // ONLY_ON_DEVICE alone isn't enough: without Chrome's Prompt API the SDK has
+  // no on-device adapter, so check the model is ready before handing it a note.
+  if ((await deviceState()) !== 'ready') throw new Error('No on-device model is ready; the note stays on this device.')
   const result = await detector.generateContent(DETECT_PROMPT.replace('{NOTE}', note))
   if (result.response.inferenceSource !== InferenceSource.ON_DEVICE) {
     throw new Error('Detection did not run on this device; refusing to continue.')
@@ -130,8 +133,10 @@ export interface Draft {
   ms: number
 }
 
-export async function draftLetter(redactedNote: string, task: string, instructions: string, model: string): Promise<Draft> {
-  const prompt = `${instructions}
+// The whole prompt is built here, before anything is sent, so the app can
+// show it and check it for held values first.
+export function buildDraftPrompt(redactedNote: string, task: string, instructions: string): string {
+  return `${instructions}
 
 The note has been de-identified on the clinician's device. Bracketed tokens such as [PATIENT_1], [CLINICIAN_2] or [DATE_3] stand for real values you will never see. Use the tokens verbatim wherever the value belongs, exactly as written, brackets included. Never invent names, dates, places, numbers or contact details, and never try to guess what a token stands for.
 
@@ -141,6 +146,9 @@ De-identified note:
 """
 ${redactedNote}
 """`
+}
+
+export async function draftLetter(prompt: string, model: string): Promise<Draft> {
   const t0 = performance.now()
   const result = await drafter(model).generateContent(prompt)
   return {

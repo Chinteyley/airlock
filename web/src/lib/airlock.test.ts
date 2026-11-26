@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import fixtures from '../../../fixtures/notes.json'
 import { findPatterns, mergeSpans, spansFromEntities } from './detect'
-import { findLeaks, redact, restore } from './vault'
+import { findLeaks, redact, restore, sealText } from './vault'
 
 const NOTE = 'Patient: Maria Delgado, DOB 03/14/1972, cell 559-204-8817. Maria lives with Tomas Delgado in Fresno, CA 93721.'
 
@@ -22,7 +22,7 @@ describe('vault', () => {
       { text: 'Maria Delgado', kind: 'patient' },
       { text: 'Tomas Delgado', kind: 'relative' },
     ]),
-  ])
+  ], NOTE)
   const today = new Date(2026, 10, 26)
   const { redacted, entries } = redact(NOTE, spans, today)
 
@@ -40,6 +40,40 @@ describe('vault', () => {
     const r = restore(`${redacted} See [PATIENT_9].`, entries)
     expect(r.text).toContain('Maria Delgado, DOB 03/14/1972')
     expect(r.unknown).toEqual(['[PATIENT_9]'])
+  })
+})
+
+describe('review findings', () => {
+  test('overlapping detections become one held span, so no detector can shrink another', () => {
+    const text = 'Dr. Jonathan Michaels\nAlice McDonald-SMITH called.'
+    const spans = mergeSpans(
+      [...findPatterns(text), ...spansFromEntities(text, [{ text: 'Alice McDonald-SMITH', kind: 'person' }])],
+      text,
+    )
+    const { redacted } = redact(text, spans)
+    expect(findLeaks(redacted, ['Jonathan Michaels', 'Alice McDonald-SMITH', 'McDonald-SMITH'])).toEqual([])
+  })
+
+  test('a held name typed into the task line is sealed before it can be sent', () => {
+    const spans = mergeSpans(spansFromEntities(NOTE, [{ text: 'Maria Delgado', kind: 'patient' }]), NOTE)
+    const { lookup } = redact(NOTE, spans)
+    expect(sealText('Write a referral for maria delgado', lookup)).toBe('Write a referral for [PATIENT_1]')
+  })
+
+  test('a name part of a different role keeps its own token', () => {
+    const text = 'Alice Jones attended with her sister Alice.'
+    const spans = mergeSpans(
+      [...findPatterns(text), ...spansFromEntities(text, [{ text: 'Alice Jones', kind: 'patient' }])],
+      text,
+    )
+    const { redacted } = redact(text, spans)
+    expect(redacted).toBe('[PATIENT_1] attended with her sister [RELATIVE_1].')
+  })
+
+  test('patterns catch bare ten-digit phones and day-month-year dates', () => {
+    const found = findPatterns('Cell: 4155550123. DOB 14 March 1972.').map((s) => [s.text, s.kind])
+    expect(found).toContainEqual(['4155550123', 'phone'])
+    expect(found).toContainEqual(['14 March 1972', 'dob'])
   })
 })
 

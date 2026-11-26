@@ -80,8 +80,13 @@ export default function App() {
         <DeviceStatus state={device} progress={progress} onDownload={download} />
       </header>
       <main>
-        {tab === 'draft' && <DraftView device={device} policy={policy} />}
-        {tab === 'audit' && <AuditView device={device} />}
+        {/* Views stay mounted so a draft in progress survives a tab switch. */}
+        <div hidden={tab !== 'draft'}>
+          <DraftView device={device} policy={policy} />
+        </div>
+        <div hidden={tab !== 'audit'}>
+          <AuditView device={device} />
+        </div>
         {tab === 'history' && <HistoryView />}
       </main>
     </div>

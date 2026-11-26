@@ -29,6 +29,8 @@ export interface VaultEntry {
 export interface Redaction {
   redacted: string
   entries: VaultEntry[]
+  // Every held string (full values and name parts) and the token it maps to.
+  lookup: [string, string][]
 }
 
 export const TOKEN_RE = /\[([A-Z]+)_(\d+)\]/g
@@ -67,7 +69,7 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
   }
 
   // Full names first, so a lone "Maria" shares the token of "Maria Delgado"
-  // when no other held name contains that part.
+  // when exactly one held name of the same role contains that part.
   const ordered = [...spans].sort((a, b) => b.text.length - a.text.length)
   const partOwners = new Map<string, Set<string>>()
   for (const s of ordered) {
@@ -83,7 +85,7 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
     if (byValue.has(key(s.text))) continue
     const owners = partOwners.get(key(s.text))
     const owner = owners?.size === 1 ? byValue.get([...owners][0]) : undefined
-    if (owner) byValue.set(key(s.text), owner)
+    if (owner && owner.kind === s.kind) byValue.set(key(s.text), owner)
     else issue(s.text, s.kind)
   }
 
@@ -100,7 +102,19 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
     at = s.end
   }
   out += text.slice(at)
-  return { redacted: out, entries }
+  const lookup = [...new Set(spans.map((s) => s.text))].map((v): [string, string] => [v, byValue.get(key(v))?.token ?? ''])
+  return { redacted: out, entries, lookup }
+}
+
+// Swaps every held string in some other text (the task line, say) for its
+// token, longest first, whole words only.
+export function sealText(text: string, lookup: [string, string][]): string {
+  let out = text
+  for (const [value, token] of [...lookup].sort((a, b) => b[0].length - a[0].length)) {
+    if (!token) continue
+    out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(value)}(?![\\p{L}\\p{N}])`, 'giu'), token)
+  }
+  return out
 }
 
 export interface Restoration {

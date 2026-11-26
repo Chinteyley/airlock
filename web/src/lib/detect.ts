@@ -45,9 +45,11 @@ const PATTERNS: Pattern[] = [
   { kind: 'url', re: /\bhttps?:\/\/[^\s)]+/g },
   { kind: 'record', re: /\b\d{3}-\d{2}-\d{4}\b/g },
   { kind: 'phone', re: /(?:\+?1[\s.-]?)?(?:\(\d{3}\)\s?|\b\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/g },
+  { kind: 'phone', re: /(?:\+\d{1,3}[\s.-]?)?\b\d{10,11}\b/g },
   { kind: 'date', re: /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g },
   { kind: 'date', re: /\b\d{4}-\d{2}-\d{2}\b/g },
   { kind: 'date', re: new RegExp(`\\b(?:${MONTHS})\\.? \\d{1,2},? \\d{4}\\b`, 'g') },
+  { kind: 'date', re: new RegExp(`\\b\\d{1,2} (?:${MONTHS})\\.?,? \\d{4}\\b`, 'g') },
   {
     kind: 'record',
     re: /\b(?:MRN|medical record(?: number)?|member ID|Medicaid ID|Medicare ID|student ID|patient ID|account(?: number)?|policy(?: number)?|SSN|social security number(?: on intake)?|ID)\b[\s:#]*((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,})/gi,
@@ -61,13 +63,13 @@ const PATTERNS: Pattern[] = [
   // A capitalized name right after a relation word: "her sister Emiko".
   {
     kind: 'relative',
-    re: /\b(?:sister|brother|son|daughter|wife|husband|mother|mom|father|dad|partner|roommate|friend|aunt|uncle|cousin|niece|nephew|grandson|granddaughter|grandmother|grandfather|fiancée?|boyfriend|girlfriend)\b,?\s+(\p{Lu}\p{Ll}+(?:[\s-]\p{Lu}\p{Ll}+)?)/gu,
+    re: /\b(?:sister|brother|son|daughter|wife|husband|mother|mom|father|dad|partner|roommate|friend|aunt|uncle|cousin|niece|nephew|grandson|granddaughter|grandmother|grandfather|fiancée?|boyfriend|girlfriend)\b,?[ \t]+(\p{Lu}\p{Ll}+(?:[ \t-]\p{Lu}\p{Ll}+)?)/gu,
     group: 1,
   },
   // A capitalized name after a title: "Dr. Alan Whitcomb", "Officer Dana Whitfield".
   {
     kind: 'person',
-    re: /\b(?:Dr|Mr|Mrs|Ms|Mx|Officer|Nurse|Coach)\.?\s+(\p{Lu}\p{Ll}+(?:[\s-]\p{Lu}\p{Ll}+)*)/gu,
+    re: /\b(?:Dr|Mr|Mrs|Ms|Mx|Officer|Nurse|Coach)\.?[ \t]+(\p{Lu}\p{Ll}+(?:[ \t-]\p{Lu}\p{Ll}+)*)/gu,
     group: 1,
   },
 ]
@@ -160,14 +162,25 @@ export function placeParts(value: string): string[] {
 
 const RANK: Record<Source, number> = { manual: 3, pattern: 2, 'on-device': 1 }
 
-// Keeps the longest span where spans overlap; on a tie, manual beats pattern beats model.
-export function mergeSpans(spans: Span[]): Span[] {
-  const sorted = [...spans].sort(
-    (a, b) => b.end - b.start - (a.end - a.start) || RANK[b.source] - RANK[a.source] || a.start - b.start,
-  )
-  const kept: Span[] = []
+// Overlapping spans become one span covering all of them, so no detector can
+// shrink what another one held. The longest span (manual, then pattern, then
+// model on a tie) names the kind.
+export function mergeSpans(spans: Span[], text: string): Span[] {
+  const sorted = [...spans].sort((a, b) => a.start - b.start || b.end - a.end)
+  const out: Span[] = []
   for (const s of sorted) {
-    if (kept.every((k) => s.end <= k.start || s.start >= k.end)) kept.push(s)
+    const last = out.at(-1)
+    if (!last || s.start >= last.end) {
+      out.push({ ...s })
+      continue
+    }
+    const lead =
+      s.end - s.start > last.end - last.start ||
+      (s.end - s.start === last.end - last.start && RANK[s.source] > RANK[last.source])
+    const end = Math.max(last.end, s.end)
+    const merged = lead ? { ...s, start: last.start, end } : { ...last, end }
+    merged.text = text.slice(merged.start, merged.end)
+    out[out.length - 1] = merged
   }
-  return kept.sort((a, b) => a.start - b.start)
+  return out
 }
