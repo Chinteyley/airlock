@@ -44,7 +44,7 @@ The Audit tab runs every note in [`fixtures/notes.json`](fixtures/notes.json) th
 | 10 tuning notes | 128 | 0, 0 | 41 |
 | 5 held-out notes | 65 | 0, 0 | 37 |
 
-Mean on-device scan time: 8.4 s and 7.9 s per note (two Nano passes: everything named, then places and organizations alone). The same notes through the iOS detector with Apple's on-device model (Foundation Models on macOS 27, same Swift code as the app): 0 of 193, 4.0 s per note.
+Mean on-device scan time: 8.4 s and 7.9 s per note (two Nano passes: everything named, then places and organizations alone).
 
 The model's output varies between runs. An earlier single-pass version missed 1 to 3 identifiers on some runs (a city mentioned on its own, a name in a signature), which is why the second pass and the signature and relation backstops exist. The tuning notes were used while writing the prompts and pattern backstops; the held-out notes were written afterwards. They were not used for tuning, with one exception: a code review pointed out that "Chart number 00-4417-82" in a held-out note had no matching pattern label, so labels for chart, case, file and claim numbers were added. All notes are synthetic: every person, place and number in them is invented. A small model can still miss an identifier in a note unlike these, which is why the review step exists and why the wire panel checks the real request.
 
