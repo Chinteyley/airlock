@@ -71,13 +71,15 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
     return entry
   }
 
-  // Full names first, so a lone "Maria" shares the token of "Maria Delgado"
-  // when exactly one held name of the same role contains that part.
+  // Full names first, so a lone given name ("Maria") shares the token of the
+  // one held name of the same role it starts ("Maria Delgado"). A lone surname
+  // gets its own token, since relatives often share one ("Ethan" and "Grace
+  // Okafor" must not restore as "Ethan Grace Okafor").
   const ordered = [...spans].sort((a, b) => b.text.length - a.text.length)
   const partOwners = new Map<string, Set<string>>()
   for (const s of ordered) {
-    if (!PERSON_KINDS.has(s.kind)) continue
-    for (const p of nameParts(s.text)) {
+    if (!PERSON_KINDS.has(s.kind) || s.source === 'manual') continue
+    for (const p of nameParts(s.text).slice(0, 1)) {
       if (p === s.text) continue
       const owners = partOwners.get(key(p)) ?? new Set<string>()
       owners.add(key(s.text))
@@ -114,7 +116,8 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
   const partOf = new Map<string, Set<string>>()
   for (const s of spans) {
     original.set(key(s.text), s.text)
-    const parts = PERSON_KINDS.has(s.kind) ? nameParts(s.text) : placeParts(s.text)
+    if (s.source === 'manual') continue
+    const parts = PERSON_KINDS.has(s.kind) ? nameParts(s.text).slice(0, 1) : placeParts(s.text)
     for (const p of parts) {
       if (!original.has(key(p))) original.set(key(p), p)
       const owners = partOf.get(key(p)) ?? new Set<string>()

@@ -85,6 +85,16 @@ describe('case and line wraps', () => {
     expect(redacted).toBe('Pt [PATIENT_1]. Spoke with [PATIENT_1] by phone. Seen with [PATIENT_1].')
   })
 
+  test('a signature name before a credential is held', () => {
+    const found = findPatterns('Jordan Price, PT, DPT, Harborview Motion. Signed: Ana Lucía Gómez, MS, CCC-SLP').map((s) => s.text)
+    expect(found).toContain('Jordan Price')
+    expect(found).toContain('Ana Lucía Gómez')
+  })
+
+  test('a city right after a street address is held', () => {
+    expect(findPatterns('from home (2231 Lakeshore Drive, Duluth).').map((s) => s.text)).toContain('Duluth')
+  })
+
   test('a clinician with a credential is not read as a city', () => {
     expect(findPatterns('Alan Whitcomb, MD').filter((s) => s.kind === 'address')).toEqual([])
   })
@@ -94,12 +104,21 @@ describe('second review', () => {
   const hold = (text: string, entities: { text: string; kind: string }[]) =>
     redact(text, mergeSpans(expandSpans(text, [...findPatterns(text), ...spansFromEntities(text, entities)]), text))
 
-  test('lowercase and mixed-case mentions are held too', () => {
-    const { redacted } = hold('Patient: Maria Delgado. maria reports pain. Seen at DaVita Riverbend (DAVITA RIVERBEND).', [
+  test('capitals, title case and mixed-case full names are held too', () => {
+    const { redacted } = hold('Patient: Maria Delgado. MARIA reports pain. Seen at DaVita Riverbend (davita riverbend).', [
       { text: 'Maria Delgado', kind: 'patient' },
       { text: 'DaVita Riverbend', kind: 'organization' },
     ])
     expect(redacted).toBe('Patient: [PATIENT_1]. [PATIENT_1] reports pain. Seen at [ORG_1] ([ORG_1]).')
+  })
+
+  test('a lone single word is never matched in lowercase, so names can’t swallow everyday words', () => {
+    const { redacted } = hold("Don Miller, Amy Low. Don can't sleep; he don't eat; low mood. Two ED visits; Ed Wong saw him.", [
+      { text: 'Don Miller', kind: 'patient' },
+      { text: 'Amy Low', kind: 'relative' },
+      { text: 'Ed Wong', kind: 'clinician' },
+    ])
+    expect(redacted).toContain("he don't eat; low mood. Two ED visits")
   })
 
   test('two-letter names and each half of a hyphenated surname are held', () => {
@@ -117,7 +136,9 @@ describe('second review', () => {
 
   test('a held word never matches inside a token', () => {
     const { redacted, lookup } = hold('Visit 11/24/2026. Patient: Kenji Date.', [{ text: 'Kenji Date', kind: 'patient' }])
-    expect(sealText('Follow up on 11/24/2026 with Date', lookup)).toBe('Follow up on [DATE_1] with [PATIENT_1]')
+    // A surname that only turns up in the task has no token yet, so the preflight blocks it.
+    expect(sealText('Follow up on 11/24/2026 with Kenji', lookup)).toBe('Follow up on [DATE_1] with [PATIENT_1]')
+    expect(findLeaks(sealText('with Date', lookup), ['Date'])).toEqual(['date'])
     expect(findLeaks(redacted, ['Date', 'Kenji Date'])).toEqual([])
   })
 })
@@ -128,7 +149,16 @@ describe('third review', () => {
 
   test('a short surname never swallows an abbreviation', () => {
     const { redacted } = hold('Patient Alex Ng. Continue NG tube feeds overnight. Ng agrees.', [{ text: 'Alex Ng', kind: 'patient' }])
-    expect(redacted).toBe('Patient [PATIENT_1]. Continue NG tube feeds overnight. [PATIENT_1] agrees.')
+    expect(redacted).toBe('Patient [PATIENT_1]. Continue NG tube feeds overnight. [PATIENT_2] agrees.')
+  })
+
+  test('a lone surname gets its own token, so relatives who share it restore correctly', () => {
+    const { redacted, entries } = hold('Ethan Okafor, 7, seen with his mother Grace Okafor. Okafor family agrees.', [
+      { text: 'Ethan Okafor', kind: 'patient' },
+      { text: 'Grace Okafor', kind: 'relative' },
+    ])
+    const restored = restore(redacted, entries).text
+    expect(restored).toBe('Ethan Okafor, 7, seen with his mother Grace Okafor. Okafor family agrees.')
   })
 
   test('sealing the task keeps word names case-sensitive', () => {
@@ -138,7 +168,7 @@ describe('third review', () => {
 
   test('a distinctive word of a held place is sealed in the task', () => {
     const { lookup } = hold('Admitted to Riverbend Medical Center.', [{ text: 'Riverbend Medical Center', kind: 'organization' }])
-    expect(sealText('Refer back to riverbend', lookup)).toBe('Refer back to [ORG_1]')
+    expect(sealText('Refer back to Riverbend', lookup)).toBe('Refer back to [ORG_1]')
   })
 })
 

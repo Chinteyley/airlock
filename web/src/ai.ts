@@ -108,11 +108,47 @@ function oneAtATime<T>(job: () => Promise<T>): Promise<T> {
   return run
 }
 
-export function detectOnDevice(note: string): Promise<ModelEntity[]> {
-  return oneAtATime(() => detect(note))
+// `places: false` skips the second pass (the task line names services, not places).
+export function detectOnDevice(note: string, { places = true } = {}): Promise<ModelEntity[]> {
+  return oneAtATime(() => detect(note, places))
 }
 
-async function detect(note: string): Promise<ModelEntity[]> {
+const PLACES_PROMPT = `List the name of every city, town, county, state, road, street, neighborhood, landmark, hospital, clinic, school, store, business, bank, club, agency and program in the clinical note, copied exactly as written. Include a city even when it is mentioned on its own.
+
+Note:
+"""
+{NOTE}
+"""`
+
+const placesSchema = {
+  type: 'object',
+  properties: { places: { type: 'array', items: { type: 'string' } } },
+  required: ['places'],
+}
+
+const placeDetector = getGenerativeModel(ai, {
+  mode: InferenceMode.ONLY_ON_DEVICE,
+  onDeviceParams: {
+    createOptions: { expectedInputs: EN, expectedOutputs: EN },
+    promptOptions: { responseConstraint: placesSchema },
+  },
+})
+
+// A second pass for places and organizations alone, which the first pass
+// sometimes skips ("her mom in Madison"). Its failure never fails the scan.
+async function detectPlaces(note: string): Promise<ModelEntity[]> {
+  try {
+    const result = await placeDetector.generateContent(PLACES_PROMPT.replace('{NOTE}', () => note))
+    if (result.response.inferenceSource !== InferenceSource.ON_DEVICE) return []
+    const parsed: unknown = JSON.parse(result.response.text())
+    const list = (parsed as { places?: unknown }).places
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string').map((text) => ({ text, kind: 'place' })) : []
+  } catch {
+    return []
+  }
+}
+
+async function detect(note: string, places: boolean): Promise<ModelEntity[]> {
   // ONLY_ON_DEVICE alone isn't enough: without Chrome's Prompt API the SDK has
   // no on-device adapter, so check the model is ready before handing it a note.
   if ((await deviceState()) !== 'ready') throw new Error('No on-device model is ready; the note stays on this device.')
@@ -122,7 +158,8 @@ async function detect(note: string): Promise<ModelEntity[]> {
   }
   const parsed: unknown = JSON.parse(result.response.text())
   const list = (parsed as { entities?: unknown }).entities
-  return Array.isArray(list) ? list.filter(isEntity) : []
+  const entities = Array.isArray(list) ? list.filter(isEntity) : []
+  return places ? [...entities, ...(await detectPlaces(note))] : entities
 }
 
 const drafters = new Map<string, GenerativeModel>()
@@ -179,9 +216,15 @@ export async function draftLetter(prompt: string, model: string): Promise<Draft>
 export function userTextOf(body: string): string {
   let text = body
   try {
-    const parsed: unknown = JSON.parse(body)
-    const parts = (parsed as { contents?: { parts?: { text?: unknown }[] }[] }).contents?.flatMap((c) => c.parts ?? []) ?? []
-    text = parts.map((p) => (typeof p.text === 'string' ? p.text : '')).join('\n')
+    // Every string in the body, wherever the SDK put it.
+    const all: string[] = []
+    const walk = (v: unknown) => {
+      if (typeof v === 'string') all.push(v)
+      else if (Array.isArray(v)) for (const x of v) walk(x)
+      else if (v && typeof v === 'object') for (const x of Object.values(v)) walk(x)
+    }
+    walk(JSON.parse(body))
+    text = all.join('\n')
   } catch {
     // Not JSON: scan the raw body.
   }

@@ -32,15 +32,21 @@ function leaksIn(wire: WireRecord[], values: string[]): string[] {
   return [...new Set(wire.flatMap((w) => findLeaks(userTextOf(w.body), values)))]
 }
 
-const PROPER_NOUN = /(?:^|\s)\p{Lu}/u
+const TASK_KINDS = new Set(['patient', 'relative', 'clinician', 'person', 'place'])
 
-// Names, numbers and places typed into the task line that the note scan never saw.
+// People, places, numbers and dates typed into the task line that the note
+// scan never saw. Services and programs ("a PTSD clinic") are what a task names.
 async function unheldInTask(sealedTask: string, deviceReady: boolean): Promise<string[]> {
   const plain = sealedTask.replace(TOKEN_RE, ' ')
   const found = findPatterns(plain).map((s) => s.text)
   if (deviceReady) {
-    const entities = await detectOnDevice(plain)
-    found.push(...entities.map((e) => e.text.trim()).filter((t) => PROPER_NOUN.test(t) && plain.includes(t)))
+    const entities = await detectOnDevice(plain, { places: false })
+    found.push(
+      ...entities
+        .filter((e) => TASK_KINDS.has(e.kind))
+        .map((e) => e.text.trim())
+        .filter((t) => t.length > 1 && plain.toLowerCase().includes(t.toLowerCase())),
+    )
   }
   return [...new Set(found)]
 }
@@ -74,14 +80,27 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   const [saved, setSaved] = useState<Saved | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showRestored, setShowRestored] = useState(true)
+  // Values the clinician released; they stay released even where a held name contains them.
+  const [released, setReleased] = useState<Set<string>>(new Set())
   // Bumped on every send and reset, so a late history save can't update a newer draft.
   const run = useRef(0)
 
-  const redaction = useMemo(() => redact(note, spans), [note, spans])
+  const redaction = useMemo(() => {
+    const r = redact(note, spans)
+    return { ...r, lookup: r.lookup.filter(([v]) => !released.has(v.toLowerCase())) }
+  }, [note, spans, released])
   // Every held string, plus each part of a held name or place, is searched for in what goes out.
   const heldValues = useMemo(
-    () => [...new Set(spans.flatMap((s) => [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : placeParts(s.text))]))],
-    [spans],
+    () =>
+      [
+        ...new Set(
+          spans.flatMap((s) => {
+            if (s.source === 'manual') return [s.text]
+            return [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : placeParts(s.text))]
+          }),
+        ),
+      ].filter((v) => !released.has(v.toLowerCase())),
+    [spans, released],
   )
   const kindCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -116,6 +135,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
     run.current += 1
     setPhase('edit')
     setSpans([])
+    setReleased(new Set())
     setSent(null)
     setAttempt(null)
     setSaved(null)
@@ -147,8 +167,10 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   // ("Maria" with "Maria Delgado"), never another person's.
   const release = (s: Span) => {
     if (phase !== 'review') return
-    const gone = new Set([s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])].map((t) => t.toLowerCase()))
-    setSpans((all) => all.filter((x) => !(x.kind === s.kind && gone.has(x.text.toLowerCase()))))
+    const norm = (t: string) => t.toLowerCase().replace(/\s+/g, ' ')
+    const gone = new Set([s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])].map(norm))
+    setSpans((all) => all.filter((x) => !(x.kind === s.kind && gone.has(norm(x.text)))))
+    setReleased((r) => new Set([...r, ...gone]))
   }
 
   const holdSelection = () => {
@@ -329,7 +351,8 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
               </div>
               {!sent && preflightLeaks.length > 0 && (
                 <div className="banner danger">
-                  The prompt still contains {preflightLeaks.join(', ')}. Airlock won't send it until that's held.
+                  The prompt still contains {preflightLeaks.join(', ')}
+                  {findLeaks(sealedTask, preflightLeaks).length > 0 ? ' in the task line. Use the full name there or take it out.' : '. Airlock won’t send it until that’s held.'}
                 </div>
               )}
               {sent && !lastWire && (

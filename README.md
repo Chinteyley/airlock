@@ -37,14 +37,16 @@ Code: [`web/src/ai.ts`](web/src/ai.ts) (models), [`web/src/lib/detect.ts`](web/s
 
 ## Measured
 
-The Audit tab runs every note in [`fixtures/notes.json`](fixtures/notes.json) through the on-device scan and checks the text that would go to the cloud for each labeled identifier. One run on an M3 Pro MacBook Pro, Chrome 158, Nov 26, 2026 (10:55 PM local):
+The Audit tab runs every note in [`fixtures/notes.json`](fixtures/notes.json) through the on-device scan and checks the text that would go to the cloud for each labeled identifier. Two consecutive runs on an M3 Pro MacBook Pro, Chrome 158 (Gemini Nano), Nov 26, 2026, 10:50–11:00 PM local:
 
-| Notes | Labeled identifiers | Leaked with Airlock | Leaked with patterns alone |
+| Notes | Labeled identifiers | Leaked with Airlock (run 1, run 2) | Leaked with patterns alone |
 | --- | --- | --- | --- |
-| 10 tuning notes | 128 | 0 | 49 |
-| 5 held-out notes | 65 | 0 | 41 |
+| 10 tuning notes | 128 | 0, 0 | 41 |
+| 5 held-out notes | 65 | 0, 0 | 37 |
 
-Mean on-device scan time: 6.5 s per note. The tuning notes were used while writing the detection prompt and the pattern backstops; the held-out notes were written afterwards and not used for tuning, with one exception: after a code review pointed out that "Chart number 00-4417-82" in a held-out note had no matching pattern label, labels for chart, case, file and claim numbers were added. All notes are synthetic: every person, place and number in them is invented. A small model can still miss an identifier in a note unlike these, which is why the review step exists and why the wire panel checks the real request.
+Mean on-device scan time: 8.4 s and 7.9 s per note (two Nano passes: everything named, then places and organizations alone). The same notes through the iOS detector with Apple's on-device model (Foundation Models on macOS 27, same Swift code as the app): 0 of 193, 4.0 s per note.
+
+The model's output varies between runs. An earlier single-pass version missed 1 to 3 identifiers on some runs (a city mentioned on its own, a name in a signature), which is why the second pass and the signature and relation backstops exist. The tuning notes were used while writing the prompts and pattern backstops; the held-out notes were written afterwards. They were not used for tuning, with one exception: a code review pointed out that "Chart number 00-4417-82" in a held-out note had no matching pattern label, so labels for chart, case, file and claim numbers were added. All notes are synthetic: every person, place and number in them is invented. A small model can still miss an identifier in a note unlike these, which is why the review step exists and why the wire panel checks the real request.
 
 ## Run it locally
 

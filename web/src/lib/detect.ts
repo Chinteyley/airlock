@@ -36,6 +36,20 @@ const STREET =
 const STATES =
   'AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|PR'
 
+// "Sister" or "sister", and so on: a relation word in either case.
+const RELATIONS = 'sister|brother|son|daughter|wife|husband|mother|mom|father|dad|partner|roommate|friend|aunt|uncle|cousin|niece|nephew|grandson|granddaughter|grandmother|grandfather|fiancée?|boyfriend|girlfriend'
+  .split('|')
+  .map((w) => `[${w[0].toUpperCase()}${w[0]}]${w.slice(1)}`)
+  .join('|')
+// One capitalized name word, with an apostrophe or inner capital ("O'Brien", "McDonald").
+const NAME_WORD = "\\p{Lu}['’]?\\p{Lu}?\\p{Ll}+(?:\\p{Lu}\\p{Ll}+)?"
+
+const CREDENTIALS = 'MD|DO|PA-C|PA|NP|RN|LPN|PT|DPT|OT|PhD|PsyD|LCSW|LMFT|MSW|PHN|CNM|DNP|MS|CCC-SLP|SLP'
+
+const CITY_STATES = STATES.split('|')
+  .filter((s) => !['MD', 'PA', 'MS', 'CT', 'MI'].includes(s))
+  .join('|')
+
 interface Pattern {
   kind: Kind
   re: RegExp
@@ -60,11 +74,18 @@ const PATTERNS: Pattern[] = [
   // After the labeled record numbers, so "Medicaid ID 0039948217" stays a record.
   { kind: 'phone', re: /(?:\+\d{1,3}[\s.-]?)?\b\d{10,11}\b/g },
   { kind: 'address', re: new RegExp(`\\b\\d{1,6}\\s+(?:[A-Z][a-z]+\\s){1,3}(?:${STREET})\\b\\.?`, 'g') },
-  // City before a state code: "Fresno, CA".
-  // MD and PA are left out here: "Alan Whitcomb, MD" is a clinician, not a city.
+  // A city right after a street address: "2231 Lakeshore Drive, Duluth".
   {
     kind: 'address',
-    re: new RegExp(`\\b([A-Z][a-z]+(?: [A-Z][a-z]+)?),\\s(?:${STATES.replace('|MD', '').replace('|PA', '')})\\b`, 'g'),
+    re: new RegExp(`\\b\\d{1,6}\\s+(?:[A-Z][a-z]+\\s){1,3}(?:${STREET})\\b\\.?,[ \\t]+([A-Z][a-z]+(?: [A-Z][a-z]+)?)`, 'g'),
+    group: 1,
+  },
+  // City before a state code: "Fresno, CA".
+  // Codes that are also credentials or clinical shorthand (MD, PA, MS, CT, MI)
+  // are left out here: "Alan Whitcomb, MD" is a clinician, not a city.
+  {
+    kind: 'address',
+    re: new RegExp(`\\b([A-Z][a-z]+(?: [A-Z][a-z]+)?),\\s(?:${CITY_STATES})\\b`, 'g'),
     group: 1,
   },
   // ZIP after a state code: "CA 93721".
@@ -72,13 +93,22 @@ const PATTERNS: Pattern[] = [
   // A capitalized name right after a relation word: "her sister Emiko".
   {
     kind: 'relative',
-    re: /\b(?:sister|brother|son|daughter|wife|husband|mother|mom|father|dad|partner|roommate|friend|aunt|uncle|cousin|niece|nephew|grandson|granddaughter|grandmother|grandfather|fiancée?|boyfriend|girlfriend)\b,?[ \t]+(?:(?:Mr|Mrs|Ms|Mx|Dr)\.?[ \t]+)?(\p{Lu}\p{Ll}+(?:[ \t-]\p{Lu}\p{Ll}+)?)/gu,
+    re: new RegExp(
+      `\\b(?:${RELATIONS})\\b,?[ \\t]+(?:(?:Mr|Mrs|Ms|Mx|Dr)\\.?[ \\t]+)?(${NAME_WORD}(?:[ \\t-]${NAME_WORD})?)`,
+      'gu',
+    ),
+    group: 1,
+  },
+  // A name before a credential, as in a signature: "Jordan Price, PT", "Priya Raman, LCSW".
+  {
+    kind: 'clinician',
+    re: new RegExp(`(${NAME_WORD}(?:[ \\t]+(?:\\p{Lu}\\.[ \\t]+)?${NAME_WORD}){1,2}),[ \\t]*(?:${CREDENTIALS})\\b`, 'gu'),
     group: 1,
   },
   // A capitalized name after a title: "Dr. Alan Whitcomb", "Officer Dana Whitfield".
   {
     kind: 'person',
-    re: /\b(?:Dr|Mr|Mrs|Ms|Mx|Officer|Nurse|Coach)\.?[ \t]+(\p{Lu}\p{Ll}+(?:[ \t-]\p{Lu}\p{Ll}+)*)/gu,
+    re: new RegExp(`\\b(?:Dr|Mr|Mrs|Ms|Mx|Officer|Nurse|Coach)\\.?[ \\t]+(${NAME_WORD}(?:[ \\t-]${NAME_WORD})*)`, 'gu'),
     group: 1,
   },
 ]
@@ -115,7 +145,12 @@ const MODEL_KINDS: Record<string, Kind> = {
   place: 'address',
 }
 
-const TITLES = new Set(['dr', 'mr', 'mrs', 'ms', 'mx', 'miss', 'officer', 'nurse', 'the', 'and'])
+// Titles, credentials and suffixes are never name parts on their own.
+const TITLES = new Set(
+  'dr mr mrs ms mx miss officer nurse the and md do pa pa-c np rn lpn pt ot dpt phd psyd lcsw lmft msw phn cnm dnp slp ccc-slp ms sr jr ii iii'.split(
+    ' ',
+  ),
+)
 
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -125,14 +160,6 @@ function titleCase(s: string) {
   return s.replace(/\p{L}+/gu, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
 }
 
-// Names that are also everyday words. Held as written, in capitals or
-// title-cased only, so a held "Will" doesn't swallow every "will".
-const WORD_NAMES = new Set(
-  'will may june april august rose ray hope faith grace joy mark bill art dawn iris ivy jack sue pat rich frank hunter summer autumn sky star angel chance cash chase page price wade young long white brown black green gray grey king bishop love hall mercy major dean bell rob guy max sunny'.split(
-    ' ',
-  ),
-)
-
 // How a held value is found anywhere (the note, the task line, a captured
 // request): in any case, with any whitespace between its words, and only as a
 // whole word ("_" counts as a word character, so "DATE" never matches inside
@@ -140,24 +167,27 @@ const WORD_NAMES = new Set(
 export function heldPattern(value: string, flags = 'gu'): RegExp {
   const words = value.trim().split(/\s+/)
   const body = (v: string) => v.trim().split(/\s+/).map(escapeRe).join('\\s+')
+  // A single word ("Maria", "Low", "Don") is matched as written, title-cased or
+  // in capitals, never in lowercase, so it can't swallow "low mood" or "don't";
+  // three letters or fewer ("Ng", "Ed") only as written or title-cased, so it
+  // can't swallow "NG tube" or "ED visits". Several words match in any case.
   const single = words.length === 1
-  // Short parts ("Ng", "Bo") are matched as written or title-cased only, so a
-  // surname never swallows an abbreviation like "NG tube".
-  const short = single && value.length <= 3
-  const wordName = single && WORD_NAMES.has(value.toLowerCase())
   let variants = [value]
-  if (short) variants = [value, titleCase(value)]
-  else if (wordName) variants = [value, value.toUpperCase(), titleCase(value)]
+  if (single && value.length <= 3) variants = [value, titleCase(value)]
+  else if (single) variants = [value, value.toUpperCase(), titleCase(value)]
   const alternatives = [...new Set(variants)].map(body)
-  const f = short || wordName ? flags : `${flags}i`
-  return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}_])`, f)
+  const f = single ? flags : `${flags}i`
+  return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}_]|['’]t\\b)`, f)
 }
 
 function occurrences(text: string, needle: string): { start: number; text: string }[] {
   return [...text.matchAll(heldPattern(needle))].map((m) => ({ start: m.index, text: m[0] }))
 }
 
-const SHORT_WORDS = new Set(['in', 'on', 'at', 'to', 'of', 'or', 'as', 'is', 'it', 'no', 'so', 'he', 'we', 'my', 'by', 'up', 'do', 'go', 'an', 'am', 'be', 'me', 'us', 'if'])
+// Short words and name particles ("De", "La") that are never name parts alone.
+const SHORT_WORDS = new Set(
+  'in on at to of or as is it no so he we my by up do go an am be me us if de la le el al di da du van von der den del dos das'.split(' '),
+)
 
 // Name parts ("Maria" from "Maria Delgado", "Tanaka" and "Reyes" from
 // "Tanaka-Reyes") so later mentions are held too.
@@ -201,7 +231,7 @@ export function spansFromEntities(text: string, entities: ModelEntity[], source:
 
 // Generic words in organization and place names, which say nothing on their own.
 const GENERIC = new Set(
-  'family medicine medical center centre hospital clinic clinics health healthcare behavioral services service care partners associates group school high elementary academy university college county city state regional general community memorial children\'s women\'s mercy saint st. st north south east west northside southside the of and at for on street avenue road lane drive court boulevard program programs recovery hospice physical therapy motion teen club bank golf packing'.split(
+  'primary emergency urgent oncology cardiology pediatric pediatrics adult adolescent women womens behavioral mental surgical surgery rehab rehabilitation radiology orthopedic orthopedics neurology psychiatry psychiatric dental eye vision kidney transplant cancer heart sleep pain wellness family medicine medical center centre hospital clinic clinics health healthcare behavioral services service care partners associates group school high elementary academy university college county city state regional general community memorial children\'s women\'s mercy saint st. st north south east west northside southside the of and at for on street avenue road lane drive court boulevard program programs recovery hospice physical therapy motion teen club bank golf packing'.split(
     ' ',
   ),
 )
