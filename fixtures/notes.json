@@ -1,0 +1,912 @@
+{
+  "about": "Synthetic clinical notes written for Airlock. Every person, place, number and date is invented. `identifiers` lists each string that must never reach the cloud. Notes marked `tuning` were used while writing the detection prompt and pattern backstops; `holdout` notes were written afterwards and never tuned on.",
+  "notes": [
+    {
+      "id": "psych-referral",
+      "title": "Outpatient therapy → psychiatry referral",
+      "task": "Write a referral letter to psychiatry asking for a medication review and intensive outpatient program intake.",
+      "text": "Session note, 11/24/2026\n\nPatient: Maria Delgado, DOB 03/14/1972, MRN 448-21-907. Lives at 1184 Alder Street, Fresno, CA 93721 with her husband Tomas; daughter Lucia (cell 559-204-8817) drives her to appointments.\n\nMaria reports six weeks of low mood, early waking and a 4 kg weight loss since being laid off from Valley Fresh Packing. PHQ-9 today 19 (11 in September). Denies active suicidal intent; describes passive thoughts that \"it would be easier not to wake up\". No prior psychiatric admissions. Sertraline 50 mg was started by her PCP, Dr. Alan Whitcomb at Sunnyside Family Clinic, three weeks ago: partial response, mild nausea.\n\nPlan: refer to psychiatry for medication review and to the IOP at Cedar Ridge Behavioral Health. Safety plan reviewed with Maria and Tomas. Follow-up 12/01/2026. She prefers email: maria.delgado72@gmail.com.\n\nPriya Raman, LCSW",
+      "identifiers": [
+        {
+          "text": "Maria Delgado",
+          "kind": "name"
+        },
+        {
+          "text": "Maria",
+          "kind": "name"
+        },
+        {
+          "text": "03/14/1972",
+          "kind": "date"
+        },
+        {
+          "text": "448-21-907",
+          "kind": "record"
+        },
+        {
+          "text": "1184 Alder Street",
+          "kind": "address"
+        },
+        {
+          "text": "Fresno",
+          "kind": "address"
+        },
+        {
+          "text": "93721",
+          "kind": "address"
+        },
+        {
+          "text": "Tomas",
+          "kind": "name"
+        },
+        {
+          "text": "Lucia",
+          "kind": "name"
+        },
+        {
+          "text": "559-204-8817",
+          "kind": "phone"
+        },
+        {
+          "text": "Valley Fresh Packing",
+          "kind": "organization"
+        },
+        {
+          "text": "Alan Whitcomb",
+          "kind": "name"
+        },
+        {
+          "text": "Sunnyside Family Clinic",
+          "kind": "organization"
+        },
+        {
+          "text": "Cedar Ridge Behavioral Health",
+          "kind": "organization"
+        },
+        {
+          "text": "11/24/2026",
+          "kind": "date"
+        },
+        {
+          "text": "12/01/2026",
+          "kind": "date"
+        },
+        {
+          "text": "maria.delgado72@gmail.com",
+          "kind": "email"
+        },
+        {
+          "text": "Priya Raman",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "peds-asthma",
+      "title": "Pediatric asthma → allergy referral",
+      "task": "Write a referral letter to pediatric allergy and immunology.",
+      "text": "Pediatric visit 10/30/2026. Ethan Okafor, 7 years old (DOB 02/09/2019), seen with his mother Grace Okafor. Third asthma exacerbation since August; two ED visits at St. Brigid Children's Hospital. Uses albuterol four times a week. Symptoms worse at night and around the family's cat. Attends Lincoln Park Elementary; school nurse Mrs. Halvorsen reports missed recess most days.\n\nExam: scattered wheeze, no retractions. Peak flow 70% of predicted.\n\nPlan: start fluticasone 88 mcg twice daily, refer to pediatric allergy for skin testing. Mom's phone (312) 555-0143. Address on file: 77 Wabash Court, Apt 4B, Evanston, IL 60201. Insurance member ID BCX99210374.\n\nDr. Hannah Liu, MD",
+      "identifiers": [
+        {
+          "text": "10/30/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Ethan Okafor",
+          "kind": "name"
+        },
+        {
+          "text": "02/09/2019",
+          "kind": "date"
+        },
+        {
+          "text": "Grace Okafor",
+          "kind": "name"
+        },
+        {
+          "text": "St. Brigid Children's Hospital",
+          "kind": "organization"
+        },
+        {
+          "text": "Lincoln Park Elementary",
+          "kind": "organization"
+        },
+        {
+          "text": "Halvorsen",
+          "kind": "name"
+        },
+        {
+          "text": "(312) 555-0143",
+          "kind": "phone"
+        },
+        {
+          "text": "77 Wabash Court",
+          "kind": "address"
+        },
+        {
+          "text": "Evanston",
+          "kind": "address"
+        },
+        {
+          "text": "60201",
+          "kind": "address"
+        },
+        {
+          "text": "BCX99210374",
+          "kind": "record"
+        },
+        {
+          "text": "Hannah Liu",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "ed-discharge",
+      "title": "Emergency department → cardiology follow-up",
+      "task": "Write a referral letter to outpatient cardiology for follow-up after this ED visit.",
+      "text": "ED discharge summary. Arrived 11/18/2026 02:40 by ambulance from home (2231 Lakeshore Drive, Duluth). Robert \"Bobby\" Kowalski, 61, retired machinist, MRN 7730-1182, brought in by his partner Denise Marsh after chest pressure while shoveling snow.\n\nTroponin peaked at 0.09, ECG with new T-wave inversions in V2–V4. Cath lab not activated; cardiology consulted by phone (Dr. Samuel Achebe). Started aspirin, atorvastatin 80 mg and heparin; pain resolved. Stress test declined overnight because Bobby wanted to go home to his dog.\n\nDischarged 11/19/2026 against advice after full discussion. Needs cardiology within 72 hours. Best contact: Denise, 218-555-3390, or kowalski.r@northmail.net.\n\nDr. Ines Ferreira, Emergency Medicine, Lakehead Regional Medical Center",
+      "identifiers": [
+        {
+          "text": "11/18/2026",
+          "kind": "date"
+        },
+        {
+          "text": "2231 Lakeshore Drive",
+          "kind": "address"
+        },
+        {
+          "text": "Duluth",
+          "kind": "address"
+        },
+        {
+          "text": "Robert",
+          "kind": "name"
+        },
+        {
+          "text": "Bobby",
+          "kind": "name"
+        },
+        {
+          "text": "Kowalski",
+          "kind": "name"
+        },
+        {
+          "text": "7730-1182",
+          "kind": "record"
+        },
+        {
+          "text": "Denise Marsh",
+          "kind": "name"
+        },
+        {
+          "text": "Denise",
+          "kind": "name"
+        },
+        {
+          "text": "Samuel Achebe",
+          "kind": "name"
+        },
+        {
+          "text": "11/19/2026",
+          "kind": "date"
+        },
+        {
+          "text": "218-555-3390",
+          "kind": "phone"
+        },
+        {
+          "text": "kowalski.r@northmail.net",
+          "kind": "email"
+        },
+        {
+          "text": "Ines Ferreira",
+          "kind": "name"
+        },
+        {
+          "text": "Lakehead Regional Medical Center",
+          "kind": "organization"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "onc-palliative",
+      "title": "Oncology → palliative care referral",
+      "task": "Write a referral letter to the palliative care team.",
+      "text": "Oncology clinic, 11/12/2026. Mrs. Aiko Tanaka-Reyes (DOB 07/22/1954, MRN A-5520913) with metastatic pancreatic adenocarcinoma, now progressing on second-line gemcitabine/nab-paclitaxel. ECOG 2, rising from 1. Pain in the epigastrium radiating to the back, 7/10, poorly controlled on oxycodone 10 mg every 6 hours. Appetite poor; lost 6 kg since September.\n\nShe lives with her son Kenji in Bellevue and wants to stay at home. Her sister Emiko flies in from Honolulu next week. She has asked about stopping chemotherapy.\n\nPlan: refer to palliative care at Evergreen Hospice Partners for symptom management and goals-of-care conversation; consider celiac plexus block. Son's number 425-555-7781.\n\nDr. Marcus Feld, Puget Sound Oncology Associates",
+      "identifiers": [
+        {
+          "text": "11/12/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Aiko Tanaka-Reyes",
+          "kind": "name"
+        },
+        {
+          "text": "07/22/1954",
+          "kind": "date"
+        },
+        {
+          "text": "A-5520913",
+          "kind": "record"
+        },
+        {
+          "text": "Kenji",
+          "kind": "name"
+        },
+        {
+          "text": "Bellevue",
+          "kind": "address"
+        },
+        {
+          "text": "Emiko",
+          "kind": "name"
+        },
+        {
+          "text": "Honolulu",
+          "kind": "address"
+        },
+        {
+          "text": "Evergreen Hospice Partners",
+          "kind": "organization"
+        },
+        {
+          "text": "425-555-7781",
+          "kind": "phone"
+        },
+        {
+          "text": "Marcus Feld",
+          "kind": "name"
+        },
+        {
+          "text": "Puget Sound Oncology Associates",
+          "kind": "organization"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "pt-knee",
+      "title": "Physical therapy → orthopedics",
+      "task": "Write a letter to the orthopedic surgeon summarizing progress and asking for re-evaluation.",
+      "text": "PT progress note, visit 9 of 12, 11/20/2026. Patient Daniel Brennan, 34, high school soccer coach at Westbrook Academy, eight weeks after ACL reconstruction (hamstring autograft) by Dr. Olivia Nakamura.\n\nKnee flexion 115°, extension lacks 5°. Quad lag persists. Effusion increased after he returned to coaching drills on his own last week. Single-leg hop testing deferred. Reports a new clicking and catching sensation medially.\n\nRecommend surgeon re-evaluation for possible meniscal involvement before progressing. Patient can be reached at dbrennan@westbrookacademy.org or 617-555-2048. Home: 19 Prospect Hill Road, Somerville, MA 02143.\n\nJordan Price, PT, DPT, Harborview Motion Physical Therapy",
+      "identifiers": [
+        {
+          "text": "11/20/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Daniel Brennan",
+          "kind": "name"
+        },
+        {
+          "text": "Westbrook Academy",
+          "kind": "organization"
+        },
+        {
+          "text": "Olivia Nakamura",
+          "kind": "name"
+        },
+        {
+          "text": "dbrennan@westbrookacademy.org",
+          "kind": "email"
+        },
+        {
+          "text": "617-555-2048",
+          "kind": "phone"
+        },
+        {
+          "text": "19 Prospect Hill Road",
+          "kind": "address"
+        },
+        {
+          "text": "Somerville",
+          "kind": "address"
+        },
+        {
+          "text": "02143",
+          "kind": "address"
+        },
+        {
+          "text": "Jordan Price",
+          "kind": "name"
+        },
+        {
+          "text": "Harborview Motion Physical Therapy",
+          "kind": "organization"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "sw-housing",
+      "title": "Hospital social work → housing program",
+      "task": "Write a referral letter to a supportive housing program.",
+      "text": "Social work note 11/21/2026. Mr. Luis Ortega-Banda, 58, admitted to Mercy General on 11/16/2026 for cellulitis of the left leg, ready for discharge but has nowhere safe to go. He was evicted from 410 Fremont Avenue, Unit 12, Sacramento on 10/31/2026 and has been sleeping in his truck near the Riverside Walmart.\n\nType 2 diabetes, A1c 11.2, insulin requires refrigeration. Social Security number on intake 527-48-1093; SSI application pending. Daughter Valeria lives in Reno and cannot house him. Case manager at Sacramento County Adult Services: Theresa Quinn, 916-555-0172.\n\nRequesting medical respite or supportive housing placement. Patient consents to this referral.\n\nAbigail Stone, MSW",
+      "identifiers": [
+        {
+          "text": "11/21/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Luis Ortega-Banda",
+          "kind": "name"
+        },
+        {
+          "text": "Mercy General",
+          "kind": "organization"
+        },
+        {
+          "text": "11/16/2026",
+          "kind": "date"
+        },
+        {
+          "text": "410 Fremont Avenue",
+          "kind": "address"
+        },
+        {
+          "text": "Sacramento",
+          "kind": "address"
+        },
+        {
+          "text": "10/31/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Riverside Walmart",
+          "kind": "address"
+        },
+        {
+          "text": "527-48-1093",
+          "kind": "record"
+        },
+        {
+          "text": "Valeria",
+          "kind": "name"
+        },
+        {
+          "text": "Reno",
+          "kind": "address"
+        },
+        {
+          "text": "Theresa Quinn",
+          "kind": "name"
+        },
+        {
+          "text": "916-555-0172",
+          "kind": "phone"
+        },
+        {
+          "text": "Abigail Stone",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "geri-memory",
+      "title": "Primary care → memory clinic",
+      "task": "Write a referral letter to a memory disorders clinic.",
+      "text": "Visit 11/05/2026. Harold \"Hal\" Petersen, 81, retired postmaster, here with his wife Margaret. Over the past year he has gotten lost twice driving home from Oak Hollow Golf Club and left the stove on at their home on 3 Birchwood Lane, Ames. Margaret now handles bills after he missed three payments to Story County Bank.\n\nMoCA 19/30 (delayed recall 1/5). B12, TSH and CMP normal. CT head from Mary Greeley Medical Center shows mild generalized atrophy.\n\nPlan: refer to memory clinic for full neuropsychological evaluation. Discussed driving safety. Margaret's cell 515-555-6620. Medicare ID 1EG4-TE5-MK72.\n\nDr. Ruth Abernathy, Ames Family Medicine",
+      "identifiers": [
+        {
+          "text": "11/05/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Harold",
+          "kind": "name"
+        },
+        {
+          "text": "Hal",
+          "kind": "name"
+        },
+        {
+          "text": "Petersen",
+          "kind": "name"
+        },
+        {
+          "text": "Margaret",
+          "kind": "name"
+        },
+        {
+          "text": "Oak Hollow Golf Club",
+          "kind": "organization"
+        },
+        {
+          "text": "3 Birchwood Lane",
+          "kind": "address"
+        },
+        {
+          "text": "Ames",
+          "kind": "address"
+        },
+        {
+          "text": "Story County Bank",
+          "kind": "organization"
+        },
+        {
+          "text": "Mary Greeley Medical Center",
+          "kind": "organization"
+        },
+        {
+          "text": "515-555-6620",
+          "kind": "phone"
+        },
+        {
+          "text": "1EG4-TE5-MK72",
+          "kind": "record"
+        },
+        {
+          "text": "Ruth Abernathy",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "ob-highrisk",
+      "title": "Obstetrics → maternal-fetal medicine",
+      "task": "Write a referral letter to maternal-fetal medicine.",
+      "text": "Prenatal visit 11/17/2026, 24 weeks 3 days. Nadia Haddad, 39, G3P1, estimated due date 03/06/2027. BP 148/94 today and 144/92 on recheck; no headache or visual change. Urine protein 1+. History of preeclampsia with her first pregnancy at Northside Women's Hospital in 2019.\n\nShe works night shifts as a pharmacist at the Elmwood CVS. Husband Karim Haddad attends visits. Started aspirin 81 mg at 12 weeks.\n\nPlan: refer to maternal-fetal medicine for growth scans and BP management; labs today. Patient portal email nadia.h.pharm@outlook.com, phone 404.555.9127.\n\nDr. Celeste Moreau, OB/GYN",
+      "identifiers": [
+        {
+          "text": "11/17/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Nadia Haddad",
+          "kind": "name"
+        },
+        {
+          "text": "03/06/2027",
+          "kind": "date"
+        },
+        {
+          "text": "Northside Women's Hospital",
+          "kind": "organization"
+        },
+        {
+          "text": "Elmwood CVS",
+          "kind": "organization"
+        },
+        {
+          "text": "Karim Haddad",
+          "kind": "name"
+        },
+        {
+          "text": "nadia.h.pharm@outlook.com",
+          "kind": "email"
+        },
+        {
+          "text": "404.555.9127",
+          "kind": "phone"
+        },
+        {
+          "text": "Celeste Moreau",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "sud-bridge",
+      "title": "Addiction medicine bridge clinic → treatment program",
+      "task": "Write a referral letter to a residential substance use treatment program.",
+      "text": "Bridge clinic note, 11/23/2026. Kyle Jennings, 27, using fentanyl intranasally daily for two years; one overdose in October reversed by his roommate Marcus with naloxone. Started buprenorphine-naloxone 16 mg today, COWS 14 before induction.\n\nHe works at Jiffy Lube on Grand River Avenue and is worried about losing the job. His mother, Pamela Jennings, is his emergency contact (248-555-0199). Probation officer: Officer Dana Whitfield, Oakland County.\n\nHe asks for residential treatment. Referring to Brightwater Recovery Center; insurance Medicaid ID 0039948217.\n\nDr. Felix Amari, Addiction Medicine",
+      "identifiers": [
+        {
+          "text": "11/23/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Kyle Jennings",
+          "kind": "name"
+        },
+        {
+          "text": "Marcus",
+          "kind": "name"
+        },
+        {
+          "text": "Jiffy Lube on Grand River Avenue",
+          "kind": "organization"
+        },
+        {
+          "text": "Pamela Jennings",
+          "kind": "name"
+        },
+        {
+          "text": "248-555-0199",
+          "kind": "phone"
+        },
+        {
+          "text": "Dana Whitfield",
+          "kind": "name"
+        },
+        {
+          "text": "Oakland County",
+          "kind": "address"
+        },
+        {
+          "text": "Brightwater Recovery Center",
+          "kind": "organization"
+        },
+        {
+          "text": "0039948217",
+          "kind": "record"
+        },
+        {
+          "text": "Felix Amari",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "school-counsel",
+      "title": "School counselor → adolescent clinic",
+      "task": "Write a referral letter to an adolescent mental health clinic.",
+      "text": "Counseling note 11/13/2026. Student: Sofia Lindqvist, grade 10, Jefferson High School, student ID 20931147. Referred by her chemistry teacher Mr. Patel after she stopped turning in work and was seen crying in class. Sofia says things got worse after her parents' divorce in July; she now splits weeks between her mom in Madison and her dad in Middleton.\n\nShe reports skipping lunch, sleeping 4–5 hours and scratching her forearms with a paperclip (superficial, last 3 days ago). No plan or intent to die.\n\nWith Sofia's agreement, parent contacted: Annika Lindqvist, 608-555-3011. Referring to Lakeview Teen Health for assessment.\n\nMs. Renee Carter, School Counselor",
+      "identifiers": [
+        {
+          "text": "11/13/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Sofia Lindqvist",
+          "kind": "name"
+        },
+        {
+          "text": "Sofia",
+          "kind": "name"
+        },
+        {
+          "text": "Jefferson High School",
+          "kind": "organization"
+        },
+        {
+          "text": "20931147",
+          "kind": "record"
+        },
+        {
+          "text": "Patel",
+          "kind": "name"
+        },
+        {
+          "text": "Madison",
+          "kind": "address"
+        },
+        {
+          "text": "Middleton",
+          "kind": "address"
+        },
+        {
+          "text": "Annika Lindqvist",
+          "kind": "name"
+        },
+        {
+          "text": "608-555-3011",
+          "kind": "phone"
+        },
+        {
+          "text": "Lakeview Teen Health",
+          "kind": "organization"
+        },
+        {
+          "text": "Renee Carter",
+          "kind": "name"
+        }
+      ],
+      "split": "tuning"
+    },
+    {
+      "id": "ho-dialysis",
+      "title": "nephrology → transplant evaluation",
+      "task": "Write a referral letter to the kidney transplant program.",
+      "text": "Nephrology f/u 11/09/2026. pt is Nguyen Thi Hoa (goes by \"Rosie\"), 52 y/o, on hemodialysis MWF at DaVita Riverbend since March. Her nephew Bao Tran translates at visits; his number is 714 555 0186.\n\nCauses: diabetic nephropathy. Fistula left arm working well. Last Kt/V 1.4. Rosie works part-time at Pho Saigon Kitchen on Bolsa Ave in Westminster and wants to keep working.\n\nRequest transplant evaluation at UCI Health. Her kidney doctor before moving was Dr. Patel-Ramos in San Jose. Chart number 00-4417-82.\n\n-- Kevin O'Brien, NP",
+      "identifiers": [
+        {
+          "text": "11/09/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Nguyen Thi Hoa",
+          "kind": "name"
+        },
+        {
+          "text": "Rosie",
+          "kind": "name"
+        },
+        {
+          "text": "DaVita Riverbend",
+          "kind": "organization"
+        },
+        {
+          "text": "Bao Tran",
+          "kind": "name"
+        },
+        {
+          "text": "714 555 0186",
+          "kind": "phone"
+        },
+        {
+          "text": "Pho Saigon Kitchen",
+          "kind": "organization"
+        },
+        {
+          "text": "Bolsa Ave",
+          "kind": "address"
+        },
+        {
+          "text": "Westminster",
+          "kind": "address"
+        },
+        {
+          "text": "UCI Health",
+          "kind": "organization"
+        },
+        {
+          "text": "Patel-Ramos",
+          "kind": "name"
+        },
+        {
+          "text": "San Jose",
+          "kind": "address"
+        },
+        {
+          "text": "00-4417-82",
+          "kind": "record"
+        },
+        {
+          "text": "Kevin O'Brien",
+          "kind": "name"
+        }
+      ],
+      "split": "holdout"
+    },
+    {
+      "id": "ho-postpartum",
+      "title": "home visit → perinatal mental health",
+      "task": "Write a referral letter to a perinatal mental health service.",
+      "text": "Home visit note (public health nursing), 11/19/2026.\n\nVisited Aaliyah Brooks and baby Jordan, 5 weeks, at their apartment on Kessler Blvd, Indianapolis. Partner (Dre) works nights at the Amazon warehouse in Plainfield. Aaliyah's EPDS score is 17. She cries most days, isn't sleeping when the baby sleeps and says she feels like \"a ghost.\" No thoughts of harming herself or the baby. Her grandmother, Ms. Loretta, comes by on weekends.\n\nBaby feeding well, weight up to 4.1 kg. Pediatrician: Riley Children's Primary Care.\n\nRefer for perinatal mental health assessment this week. Best number: (317) 555-2290. Email aaliyahb.indy@yahoo.com.\n\nCarmen Ruiz, RN, PHN",
+      "identifiers": [
+        {
+          "text": "11/19/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Aaliyah Brooks",
+          "kind": "name"
+        },
+        {
+          "text": "Aaliyah",
+          "kind": "name"
+        },
+        {
+          "text": "Jordan",
+          "kind": "name"
+        },
+        {
+          "text": "Kessler Blvd",
+          "kind": "address"
+        },
+        {
+          "text": "Indianapolis",
+          "kind": "address"
+        },
+        {
+          "text": "Dre",
+          "kind": "name"
+        },
+        {
+          "text": "Plainfield",
+          "kind": "address"
+        },
+        {
+          "text": "Loretta",
+          "kind": "name"
+        },
+        {
+          "text": "Riley Children's Primary Care",
+          "kind": "organization"
+        },
+        {
+          "text": "(317) 555-2290",
+          "kind": "phone"
+        },
+        {
+          "text": "aaliyahb.indy@yahoo.com",
+          "kind": "email"
+        },
+        {
+          "text": "Carmen Ruiz",
+          "kind": "name"
+        }
+      ],
+      "split": "holdout"
+    },
+    {
+      "id": "ho-stroke",
+      "title": "inpatient rehab → outpatient speech therapy",
+      "task": "Write a referral letter to outpatient speech-language therapy.",
+      "text": "Discharge from inpatient rehab, 11/22/2026.\n\nGiuseppe \"Joe\" Marchetti, 74, left MCA stroke 10/27/2026, treated at Providence St. Vincent. Expressive aphasia improving: now names 7/10 objects, short phrases. Mild right arm weakness. Swallow cleared for regular diet.\n\nGoing home to his daughter Francesca's house, 5521 SE Woodstock, Portland, OR 97206. Francesca's cell 503-555-4471. Former bricklayer, union member with Local 1. Primary care: Dr. Yusuf at Woodstock Family Health.\n\nNeeds outpatient SLP 2–3x/week. MRN 22-940-118.\n\nSigned: Ana Lucía Gómez, MS, CCC-SLP",
+      "identifiers": [
+        {
+          "text": "11/22/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Giuseppe",
+          "kind": "name"
+        },
+        {
+          "text": "Joe",
+          "kind": "name"
+        },
+        {
+          "text": "Marchetti",
+          "kind": "name"
+        },
+        {
+          "text": "10/27/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Providence St. Vincent",
+          "kind": "organization"
+        },
+        {
+          "text": "Francesca",
+          "kind": "name"
+        },
+        {
+          "text": "5521 SE Woodstock",
+          "kind": "address"
+        },
+        {
+          "text": "Portland",
+          "kind": "address"
+        },
+        {
+          "text": "97206",
+          "kind": "address"
+        },
+        {
+          "text": "503-555-4471",
+          "kind": "phone"
+        },
+        {
+          "text": "Yusuf",
+          "kind": "name"
+        },
+        {
+          "text": "Woodstock Family Health",
+          "kind": "organization"
+        },
+        {
+          "text": "22-940-118",
+          "kind": "record"
+        },
+        {
+          "text": "Ana Lucía Gómez",
+          "kind": "name"
+        }
+      ],
+      "split": "holdout"
+    },
+    {
+      "id": "ho-eating",
+      "title": "college health → eating disorder program",
+      "task": "Write a referral letter to an eating disorder treatment program.",
+      "text": "Student health visit 11/06/2026. Priyanka Iyer, sophomore at Tufts, 19. Referred by her RA, Becca, who noticed she skips dining hall meals. BMI 16.8, down from 20.1 in August. Bradycardia (HR 46), orthostatic. Runs 10+ miles a day with the club cross-country team. Her mom in Edison, NJ doesn't know yet; Priyanka asked us not to call home.\n\nLabs today: K 3.3. EKG ordered.\n\nUrgent referral to the eating disorder program at Walden Behavioral Care in Waltham. Student ID 1298-4410. Contact via priyanka.iyer@tufts.edu.\n\nDr. Benjamin Hart, Tufts Health Service",
+      "identifiers": [
+        {
+          "text": "11/06/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Priyanka Iyer",
+          "kind": "name"
+        },
+        {
+          "text": "Priyanka",
+          "kind": "name"
+        },
+        {
+          "text": "Tufts",
+          "kind": "organization"
+        },
+        {
+          "text": "Becca",
+          "kind": "name"
+        },
+        {
+          "text": "Edison",
+          "kind": "address"
+        },
+        {
+          "text": "Walden Behavioral Care",
+          "kind": "organization"
+        },
+        {
+          "text": "Waltham",
+          "kind": "address"
+        },
+        {
+          "text": "1298-4410",
+          "kind": "record"
+        },
+        {
+          "text": "priyanka.iyer@tufts.edu",
+          "kind": "email"
+        },
+        {
+          "text": "Benjamin Hart",
+          "kind": "name"
+        }
+      ],
+      "split": "holdout"
+    },
+    {
+      "id": "ho-veteran",
+      "title": "VA primary care → PTSD clinic",
+      "task": "Write a referral letter to a PTSD specialty clinic.",
+      "text": "PACT visit 11/16/2026. Marcus Delaney Sr., 45, Army veteran (two Iraq deployments), lives alone in a trailer off County Road 12 outside Tullahoma. Nightmares 5 nights a week, hypervigilance, drinking a fifth of whiskey on weekends. PCL-5 score 58. He came in because his buddy from his old unit, Ray Castillo, drove him here. Denies SI today; owns firearms, agreed to store them with Ray.\n\nWorks as a mechanic at Tullahoma Tire & Auto. Sister Denise in Murfreesboro is his emergency contact, 615-555-3307. Last 4 SSN 6620.\n\nRefer to PTSD clinic at the Alvin C. York VA. \n\nT. Washington, PA-C",
+      "identifiers": [
+        {
+          "text": "11/16/2026",
+          "kind": "date"
+        },
+        {
+          "text": "Marcus Delaney",
+          "kind": "name"
+        },
+        {
+          "text": "County Road 12",
+          "kind": "address"
+        },
+        {
+          "text": "Tullahoma",
+          "kind": "address"
+        },
+        {
+          "text": "Ray Castillo",
+          "kind": "name"
+        },
+        {
+          "text": "Ray",
+          "kind": "name"
+        },
+        {
+          "text": "Tullahoma Tire & Auto",
+          "kind": "organization"
+        },
+        {
+          "text": "Denise",
+          "kind": "name"
+        },
+        {
+          "text": "Murfreesboro",
+          "kind": "address"
+        },
+        {
+          "text": "615-555-3307",
+          "kind": "phone"
+        },
+        {
+          "text": "Alvin C. York VA",
+          "kind": "organization"
+        },
+        {
+          "text": "Washington",
+          "kind": "name"
+        }
+      ],
+      "split": "holdout"
+    }
+  ]
+}
