@@ -12,7 +12,7 @@ Airlock uses both, for the job each one is good at:
 4. **Airlock proves it.** Before sending, the full prompt is checked for every held value (and any name typed into the task line), and Send stays locked until the count is zero. After sending, the app captures the literal body of the request where the Firebase SDK calls `fetch` and checks it again. The wire panel shows that body, its HTTP status and the count: *0 of 17 held*.
 5. **Names come back on the device.** Tokens are swapped back for real values locally, by plain string substitution, not by a model.
 
-Try it: **https://airlock-hybrid-2026.web.app** (Chrome on desktop; see [Testing](#testing)).
+Try it: **https://airlock-hybrid-2026.web.app** (Chrome on desktop; see [Testing](#testing)). The same airlock runs on iPhone with Apple's on-device model ([On iPhone](#on-iphone)).
 
 ## How Airlock uses Firebase AI Logic hybrid inference
 
@@ -26,10 +26,35 @@ Airlock uses three inference modes, and each choice is a privacy decision, not a
 
 Code: [`web/src/ai.ts`](web/src/ai.ts) (models), [`web/src/lib/detect.ts`](web/src/lib/detect.ts) (patterns and span merging), [`web/src/lib/vault.ts`](web/src/lib/vault.ts) (tokens, restore, leak scan), [`web/src/lib/wire.ts`](web/src/lib/wire.ts) (request capture).
 
+## On iPhone
+
+The iOS app in [`ios/`](ios) runs the same airlock with Apple's on-device model:
+
+| Job | Model | Why |
+| --- | --- | --- |
+| Find identifiers | Apple Foundation Models `SystemLanguageModel`, guided generation | Same rule as the web: the raw note stays on the phone. Without Apple Intelligence, Airlock stays sealed and falls back to patterns and manual review. |
+| Draft the letter | Gemini through Firebase AI Logic's `GeminiLanguageModel`, falling back to the on-device model | `GeminiLanguageModel` is a Foundation Models `LanguageModel`, so one `LanguageModelSession` API drives both. The letter card shows which one wrote it. |
+
+Patterns, tokens, the leak scan and restore are Swift ports of the web code ([`Detect.swift`](ios/Airlock/Detect.swift), [`Vault.swift`](ios/Airlock/Vault.swift)). The wire card shows the exact prompt handed to Firebase AI Logic and its held-value count. History is saved to the same Firestore collection under the same rules.
+
+Requirements: Xcode 27, iOS 27 with Apple Intelligence (a simulator on an Apple silicon Mac with Apple Intelligence enabled works), and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+
+```sh
+cd ios
+firebase appcheck:debugtokens:create --app <your iOS app id>
+echo "APPCHECK_DEBUG_TOKEN = <that token>" > Secrets.xcconfig
+xcodegen generate
+open Airlock.xcodeproj   # run on an iOS 27 simulator
+```
+
+Debug builds use the App Check debug provider. Release builds use App Attest, which this project hasn't registered yet, so run Debug. Simulator builds are signed ad hoc so Firebase Auth can use the keychain; set a team to run on a phone.
+
+[`ios/Audit/main.swift`](ios/Audit/main.swift) runs the labeled notes through the app's own detection code on macOS 27's Foundation Models: `swiftc -o build/audit Audit/main.swift Airlock/OnDevice.swift Airlock/Detect.swift Airlock/Vault.swift && build/audit ../fixtures/notes.json` from `ios/`. On the same M3 Pro, Nov 26, 2026: **0 of 193** labeled identifiers leaked, against 77 with patterns alone; about 3.9 s per note.
+
 ## Firebase products
 
-- **Firebase AI Logic** (Gemini Developer API) with hybrid inference on Chrome's Prompt API (Gemini Nano).
-- **App Check**, enforced for AI Logic: Fraud Defense (reCAPTCHA Enterprise) on the hosted app, the debug provider in local development.
+- **Firebase AI Logic** (Gemini Developer API) with hybrid inference on Chrome's Prompt API (Gemini Nano), and `GeminiLanguageModel` alongside Apple's on-device model on iOS.
+- **App Check**, enforced for AI Logic: Fraud Defense (reCAPTCHA Enterprise) on the hosted app, the debug provider in local development and iOS debug builds.
 - **Authentication**: anonymous sign-in scopes each user's history.
 - **Cloud Firestore**: stores the redacted note and the letter as the cloud wrote it, tokens and all: the same text that already went to the cloud, nothing more. Before writing, the app scans the record for every held value and refuses to store it if one is found (a client-side guard). Security rules enforce ownership, the schema and field sizes, and reject any record that reports a leaked value.
 - **Remote Config**: the policy name, the cloud drafting model and the drafting instructions, so an organization can change them without a release.
