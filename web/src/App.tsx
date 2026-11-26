@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DeviceState } from './ai'
 import { deviceState, preloadDevice, warmDevice } from './ai'
 import type { Policy } from './firebase'
-import { policyReady } from './firebase'
+import { DEFAULT_POLICY, policyReady } from './firebase'
 import { AuditView } from './views/AuditView'
 import { DraftView } from './views/DraftView'
 import { HistoryView } from './views/HistoryView'
@@ -42,22 +42,38 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('draft')
   const [device, setDevice] = useState<DeviceState>('checking')
   const [progress, setProgress] = useState<number | null>(null)
-  const [policy, setPolicy] = useState<Policy | null>(null)
+  const [policy, setPolicy] = useState<Policy>(DEFAULT_POLICY)
 
   useEffect(() => {
-    deviceState().then((state) => {
-      setDevice(state)
-      if (state === 'ready') preloadDevice()
-    })
+    deviceState()
+      .then((state) => {
+        setDevice(state)
+        if (state === 'ready') preloadDevice()
+      })
+      .catch(() => setDevice('unsupported'))
     policyReady.then(setPolicy)
   }, [])
+
+  // A download started in another tab or before a reload finishes on its own; watch for it.
+  useEffect(() => {
+    if (device !== 'downloading') return
+    const timer = setInterval(() => {
+      deviceState()
+        .then((state) => {
+          setDevice((d) => (d === 'downloading' && state !== 'downloading' ? state : d))
+          if (state === 'ready') preloadDevice()
+        })
+        .catch(() => undefined)
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [device])
 
   const download = () => {
     setDevice('downloading')
     warmDevice(setProgress)
       .then(deviceState)
       .then(setDevice)
-      .catch(() => setDevice('unsupported'))
+      .catch(() => deviceState().then(setDevice, () => setDevice('unsupported')))
   }
 
   return (
@@ -76,7 +92,7 @@ export default function App() {
           ))}
         </nav>
         <span className="spacer" />
-        {policy && <span className="badge">POLICY · {policy.policyName}</span>}
+        <span className="badge">POLICY · {policy.policyName}</span>
         <DeviceStatus state={device} progress={progress} onDownload={download} />
       </header>
       <main>

@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
+import type { User } from 'firebase/auth'
 import { getAuth, signInAnonymously } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { fetchAndActivate, getRemoteConfig, getValue } from 'firebase/remote-config'
@@ -32,7 +33,19 @@ initializeAppCheck(app, {
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 
-export const authReady = signInAnonymously(auth).then((c) => c.user)
+// Signs in anonymously on first use, and tries again after a failure (an
+// offline start shouldn't break history for the rest of the session).
+let signIn: Promise<User> | null = null
+export function ensureAuth(): Promise<User> {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser)
+  signIn ??= signInAnonymously(auth)
+    .then((c) => c.user)
+    .catch((e: unknown) => {
+      signIn = null
+      throw e
+    })
+  return signIn
+}
 
 const remoteConfig = getRemoteConfig(app)
 remoteConfig.settings.minimumFetchIntervalMillis = 60_000
@@ -50,6 +63,12 @@ export interface Policy {
   policyName: string
   draftModel: string
   draftInstructions: string
+}
+
+export const DEFAULT_POLICY: Policy = {
+  policyName: POLICY_DEFAULTS.policy_name,
+  draftModel: POLICY_DEFAULTS.draft_model,
+  draftInstructions: POLICY_DEFAULTS.draft_instructions,
 }
 
 export const policyReady: Promise<Policy> = fetchAndActivate(remoteConfig)

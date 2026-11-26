@@ -13,8 +13,11 @@ service cloud.firestore {
         && request.resource.data.redactedLetter.size() < 20000
         && request.resource.data.title is string
         && request.resource.data.platform in ['web', 'ios']
-        && request.resource.data.held is int
-        && request.resource.data.leaked is int
+        && request.resource.data.title.size() < 200
+        && request.resource.data.held is int && request.resource.data.held >= 0
+        && request.resource.data.leaked == 0
+        && (request.resource.data.payloadSha256 == null
+          || (request.resource.data.payloadSha256 is string && request.resource.data.payloadSha256.size() == 64))
         && request.resource.data.detectedOn in ['on-device', 'patterns-only']
         && request.resource.data.draftedOn in ['IN_CLOUD', 'ON_DEVICE']
         && request.resource.data.createdAt == request.time;

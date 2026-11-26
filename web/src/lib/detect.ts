@@ -33,6 +33,9 @@ const MONTHS = 'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|J
 const STREET =
   'Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Boulevard|Blvd|Court|Ct|Way|Place|Pl|Terrace|Circle|Highway|Hwy|Parkway|Pkwy'
 
+const STATES =
+  'AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|PR'
+
 interface Pattern {
   kind: Kind
   re: RegExp
@@ -45,25 +48,31 @@ const PATTERNS: Pattern[] = [
   { kind: 'url', re: /\bhttps?:\/\/[^\s)]+/g },
   { kind: 'record', re: /\b\d{3}-\d{2}-\d{4}\b/g },
   { kind: 'phone', re: /(?:\+?1[\s.-]?)?(?:\(\d{3}\)\s?|\b\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/g },
-  { kind: 'phone', re: /(?:\+\d{1,3}[\s.-]?)?\b\d{10,11}\b/g },
   { kind: 'date', re: /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g },
   { kind: 'date', re: /\b\d{4}-\d{2}-\d{2}\b/g },
   { kind: 'date', re: new RegExp(`\\b(?:${MONTHS})\\.? \\d{1,2},? \\d{4}\\b`, 'g') },
   { kind: 'date', re: new RegExp(`\\b\\d{1,2} (?:${MONTHS})\\.?,? \\d{4}\\b`, 'g') },
   {
     kind: 'record',
-    re: /\b(?:MRN|medical record(?: number)?|member ID|Medicaid ID|Medicare ID|student ID|patient ID|account(?: number)?|policy(?: number)?|SSN|social security number(?: on intake)?|ID)\b[\s:#]*((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,})/gi,
+    re: /\b(?:MRN|medical record(?: number)?|member ID|Medicaid ID|Medicare ID|student ID|patient ID|account(?: number)?|policy(?: number)?|chart(?: number)?|case(?: number)?|file(?: number)?|claim(?: number)?|SSN|social security number(?: on intake)?|ID)\b[\s:#]*((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,})/gi,
     group: 1,
   },
+  // After the labeled record numbers, so "Medicaid ID 0039948217" stays a record.
+  { kind: 'phone', re: /(?:\+\d{1,3}[\s.-]?)?\b\d{10,11}\b/g },
   { kind: 'address', re: new RegExp(`\\b\\d{1,6}\\s+(?:[A-Z][a-z]+\\s){1,3}(?:${STREET})\\b\\.?`, 'g') },
   // City before a state code: "Fresno, CA".
-  { kind: 'address', re: /\b([A-Z][a-z]+(?: [A-Z][a-z]+)?),\s[A-Z]{2}\b/g, group: 1 },
+  // MD and PA are left out here: "Alan Whitcomb, MD" is a clinician, not a city.
+  {
+    kind: 'address',
+    re: new RegExp(`\\b([A-Z][a-z]+(?: [A-Z][a-z]+)?),\\s(?:${STATES.replace('|MD', '').replace('|PA', '')})\\b`, 'g'),
+    group: 1,
+  },
   // ZIP after a state code: "CA 93721".
-  { kind: 'address', re: /\b[A-Z]{2}\s(\d{5}(?:-\d{4})?)\b/g, group: 1 },
+  { kind: 'address', re: new RegExp(`\\b(?:${STATES})\\s(\\d{5}(?:-\\d{4})?)\\b`, 'g'), group: 1 },
   // A capitalized name right after a relation word: "her sister Emiko".
   {
     kind: 'relative',
-    re: /\b(?:sister|brother|son|daughter|wife|husband|mother|mom|father|dad|partner|roommate|friend|aunt|uncle|cousin|niece|nephew|grandson|granddaughter|grandmother|grandfather|fiancée?|boyfriend|girlfriend)\b,?[ \t]+(\p{Lu}\p{Ll}+(?:[ \t-]\p{Lu}\p{Ll}+)?)/gu,
+    re: /\b(?:sister|brother|son|daughter|wife|husband|mother|mom|father|dad|partner|roommate|friend|aunt|uncle|cousin|niece|nephew|grandson|granddaughter|grandmother|grandfather|fiancée?|boyfriend|girlfriend)\b,?[ \t]+(?:(?:Mr|Mrs|Ms|Mx|Dr)\.?[ \t]+)?(\p{Lu}\p{Ll}+(?:[ \t-]\p{Lu}\p{Ll}+)?)/gu,
     group: 1,
   },
   // A capitalized name after a title: "Dr. Alan Whitcomb", "Officer Dana Whitfield".
@@ -112,19 +121,54 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function occurrences(text: string, needle: string): number[] {
-  const out: number[] = []
-  const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(needle)}(?![\\p{L}\\p{N}])`, 'gu')
-  for (const m of text.matchAll(re)) out.push(m.index)
-  return out
+function titleCase(s: string) {
+  return s.replace(/\p{L}+/gu, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
 }
 
-// Name parts ("Maria" from "Maria Delgado") so later mentions are held too.
+// Names that are also everyday words. Held as written, in capitals or
+// title-cased only, so a held "Will" doesn't swallow every "will".
+const WORD_NAMES = new Set(
+  'will may june april august rose ray hope faith grace joy mark bill art dawn iris ivy jack sue pat rich frank hunter summer autumn sky star angel chance cash chase page price wade young long white brown black green gray grey king bishop love hall mercy major dean bell rob guy max sunny'.split(
+    ' ',
+  ),
+)
+
+// How a held value is found anywhere (the note, the task line, a captured
+// request): in any case, with any whitespace between its words, and only as a
+// whole word ("_" counts as a word character, so "DATE" never matches inside
+// a "[DATE_1]" token).
+export function heldPattern(value: string, flags = 'gu'): RegExp {
+  const words = value.trim().split(/\s+/)
+  const body = (v: string) => v.trim().split(/\s+/).map(escapeRe).join('\\s+')
+  const wordName = words.length === 1 && WORD_NAMES.has(value.toLowerCase())
+  const alternatives = wordName ? [...new Set([value, value.toUpperCase(), titleCase(value)])].map(body) : [body(value)]
+  const f = wordName ? flags : `${flags}i`
+  return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}_])`, f)
+}
+
+function occurrences(text: string, needle: string): { start: number; text: string }[] {
+  return [...text.matchAll(heldPattern(needle))].map((m) => ({ start: m.index, text: m[0] }))
+}
+
+const SHORT_WORDS = new Set(['in', 'on', 'at', 'to', 'of', 'or', 'as', 'is', 'it', 'no', 'so', 'he', 'we', 'my', 'by', 'up', 'do', 'go', 'an', 'am', 'be', 'me', 'us', 'if'])
+
+// Name parts ("Maria" from "Maria Delgado", "Tanaka" and "Reyes" from
+// "Tanaka-Reyes") so later mentions are held too.
 export function nameParts(name: string): string[] {
-  return name
-    .split(/\s+/)
-    .map((p) => p.replace(/^["'(]+|["'),.;:]+$/g, ''))
-    .filter((p) => p.length >= 3 && /^\p{Lu}/u.test(p) && !TITLES.has(p.toLowerCase()))
+  const words = name.split(/\s+/).map((p) => p.replace(/^["'(]+|["'),.;:]+$/g, ''))
+  const pieces = [...words, ...words.filter((w) => w.includes('-')).flatMap((w) => w.split('-'))]
+  return [
+    ...new Set(
+      pieces.filter(
+        (p) =>
+          p.length >= 2 &&
+          p !== name &&
+          /^\p{Lu}/u.test(p) &&
+          !TITLES.has(p.toLowerCase()) &&
+          !SHORT_WORDS.has(p.toLowerCase()),
+      ),
+    ),
+  ]
 }
 
 // Turns model entities into spans: every occurrence of each entity, and of
@@ -134,11 +178,14 @@ export function spansFromEntities(text: string, entities: ModelEntity[], source:
   for (const e of entities) {
     const kind = MODEL_KINDS[e.kind] ?? 'person'
     const value = e.text.trim().replace(/^(?:Dr|Mr|Mrs|Ms|Mx)\.?\s+/, '')
-    if (value.length < 2 || !text.includes(value)) continue
-    const needles = PERSON_KINDS.has(kind) ? [value, ...nameParts(value)] : [value, ...placeParts(value)]
+    if (value.length < 2) continue
+    // Parts are tried even when the full value isn't in the note verbatim. A
+    // manual hold is held exactly as selected, without parts.
+    const parts = PERSON_KINDS.has(kind) ? nameParts(value) : placeParts(value)
+    const needles = source === 'manual' ? [value] : [value, ...parts]
     for (const n of needles) {
-      for (const start of occurrences(text, n)) {
-        spans.push({ start, end: start + n.length, text: n, kind, source })
+      for (const o of occurrences(text, n)) {
+        spans.push({ start: o.start, end: o.start + o.text.length, text: o.text, kind, source })
       }
     }
   }
@@ -158,6 +205,25 @@ export function placeParts(value: string): string[] {
   const words = value.split(/\s+/)
   if (words.length < 2) return []
   return words.filter((w) => w.length >= 3 && /^\p{Lu}\p{Ll}/u.test(w) && !GENERIC.has(w.toLowerCase()))
+}
+
+// Every occurrence of every span's text (and of a person's name parts), so a
+// value found once, by any detector, is held everywhere it appears.
+export function expandSpans(text: string, spans: Span[]): Span[] {
+  const out = [...spans]
+  const seen = new Set<string>()
+  for (const s of spans) {
+    const k = `${s.kind}:${s.text.toLowerCase()}`
+    if (seen.has(k) || s.source === 'manual') continue
+    seen.add(k)
+    const needles = [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])]
+    for (const n of needles) {
+      for (const o of occurrences(text, n)) {
+        out.push({ start: o.start, end: o.start + o.text.length, text: o.text, kind: s.kind, source: s.source })
+      }
+    }
+  }
+  return out
 }
 
 const RANK: Record<Source, number> = { manual: 3, pattern: 2, 'on-device': 1 }

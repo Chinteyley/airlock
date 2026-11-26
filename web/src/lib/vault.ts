@@ -3,7 +3,7 @@
 // restoring never depends on a model getting it right.
 
 import type { Kind, Span } from './detect'
-import { nameParts, PERSON_KINDS } from './detect'
+import { heldPattern, nameParts, PERSON_KINDS } from './detect'
 
 const LABEL: Record<Kind, string> = {
   patient: 'PATIENT',
@@ -42,15 +42,18 @@ const OLDEST_EXACT_AGE = 89
 export function ageLabel(dob: string, today: Date): string | null {
   const m = dob.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
   if (!m) return null
-  const year = m[3].length === 2 ? 1900 + Number(m[3]) : Number(m[3])
+  const yy = Number(m[3])
+  const century = yy <= today.getFullYear() % 100 ? 2000 : 1900
+  const year = m[3].length === 2 ? century + yy : yy
   const born = new Date(year, Number(m[1]) - 1, Number(m[2]))
   const age = Math.floor((today.getTime() - born.getTime()) / MS_PER_YEAR)
   if (Number.isNaN(age) || age < 0) return null
   return age > OLDEST_EXACT_AGE ? 'age 90+' : `age ${age}`
 }
 
+// "Maria Delgado", "MARIA DELGADO" and a line-wrapped "Maria\nDelgado" are one value.
 function key(value: string) {
-  return value.toLowerCase()
+  return value.toLowerCase().replace(/\s+/g, ' ')
 }
 
 export function redact(text: string, spans: Span[], today = new Date()): Redaction {
@@ -102,7 +105,13 @@ export function redact(text: string, spans: Span[], today = new Date()): Redacti
     at = s.end
   }
   out += text.slice(at)
-  const lookup = [...new Set(spans.map((s) => s.text))].map((v): [string, string] => [v, byValue.get(key(v))?.token ?? ''])
+  // Parts of a held name that belong to exactly one held name of the same role
+  // seal to that name's token wherever else they turn up (the task line, say).
+  for (const [part, owners] of partOwners) {
+    const owner = owners.size === 1 ? byValue.get([...owners][0]) : undefined
+    if (owner && !byValue.has(part) && PERSON_KINDS.has(owner.kind)) byValue.set(part, owner)
+  }
+  const lookup = [...byValue].map(([v, e]): [string, string] => [v, e.token])
   return { redacted: out, entries, lookup }
 }
 
@@ -112,7 +121,7 @@ export function sealText(text: string, lookup: [string, string][]): string {
   let out = text
   for (const [value, token] of [...lookup].sort((a, b) => b[0].length - a[0].length)) {
     if (!token) continue
-    out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(value)}(?![\\p{L}\\p{N}])`, 'giu'), token)
+    out = out.replace(heldPattern(value), token)
   }
   return out
 }
@@ -146,10 +155,6 @@ function strings(value: unknown, out: string[]): string[] {
   return out
 }
 
-function escapeRe(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 // Every held value found as a whole word in an outbound payload: in the raw
 // body, and in the decoded strings when the body is JSON (so escapes like
 // ' can't hide a match).
@@ -163,7 +168,7 @@ export function findLeaks(payload: string, values: string[]): string[] {
   const found = new Set<string>()
   for (const v of values) {
     if (v.length < 2 || found.has(v.toLowerCase())) continue
-    const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(v)}(?![\\p{L}\\p{N}])`, 'iu')
+    const re = heldPattern(v, 'u')
     if (haystacks.some((h) => re.test(h))) found.add(v.toLowerCase())
   }
   return [...found]

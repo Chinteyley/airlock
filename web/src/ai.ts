@@ -99,11 +99,24 @@ function isEntity(x: unknown): x is ModelEntity {
   )
 }
 
-export async function detectOnDevice(note: string): Promise<ModelEntity[]> {
+// The SDK keeps one on-device session and destroys it when the next request
+// starts, so on-device requests run one at a time.
+let queue: Promise<unknown> = Promise.resolve()
+function oneAtATime<T>(job: () => Promise<T>): Promise<T> {
+  const run = queue.then(job, job)
+  queue = run.catch(() => undefined)
+  return run
+}
+
+export function detectOnDevice(note: string): Promise<ModelEntity[]> {
+  return oneAtATime(() => detect(note))
+}
+
+async function detect(note: string): Promise<ModelEntity[]> {
   // ONLY_ON_DEVICE alone isn't enough: without Chrome's Prompt API the SDK has
   // no on-device adapter, so check the model is ready before handing it a note.
   if ((await deviceState()) !== 'ready') throw new Error('No on-device model is ready; the note stays on this device.')
-  const result = await detector.generateContent(DETECT_PROMPT.replace('{NOTE}', note))
+  const result = await detector.generateContent(DETECT_PROMPT.replace('{NOTE}', () => note))
   if (result.response.inferenceSource !== InferenceSource.ON_DEVICE) {
     throw new Error('Detection did not run on this device; refusing to continue.')
   }
@@ -135,10 +148,13 @@ export interface Draft {
 
 // The whole prompt is built here, before anything is sent, so the app can
 // show it and check it for held values first.
+const PREAMBLE =
+  "The note has been de-identified on the clinician's device. Bracketed tokens such as [PATIENT_1], [CLINICIAN_2] or [DATE_3] stand for real values you will never see. Use the tokens verbatim wherever the value belongs, exactly as written, brackets included. Never invent names, dates, places, numbers or contact details, and never try to guess what a token stands for."
+
 export function buildDraftPrompt(redactedNote: string, task: string, instructions: string): string {
   return `${instructions}
 
-The note has been de-identified on the clinician's device. Bracketed tokens such as [PATIENT_1], [CLINICIAN_2] or [DATE_3] stand for real values you will never see. Use the tokens verbatim wherever the value belongs, exactly as written, brackets included. Never invent names, dates, places, numbers or contact details, and never try to guess what a token stands for.
+${PREAMBLE}
 
 Task: ${task}
 
@@ -156,4 +172,19 @@ export async function draftLetter(prompt: string, model: string): Promise<Draft>
     source: result.response.inferenceSource === InferenceSource.ON_DEVICE ? 'ON_DEVICE' : 'IN_CLOUD',
     ms: Math.round(performance.now() - t0),
   }
+}
+
+// The parts of a captured request body the user wrote (the sealed task and the
+// redacted note), without Airlock's own fixed wording, which is what the leak
+// scan should read.
+export function userTextOf(body: string, instructions: string): string {
+  let text = body
+  try {
+    const parsed: unknown = JSON.parse(body)
+    const parts = (parsed as { contents?: { parts?: { text?: unknown }[] }[] }).contents?.flatMap((c) => c.parts ?? []) ?? []
+    text = parts.map((p) => (typeof p.text === 'string' ? p.text : '')).join('\n')
+  } catch {
+    // Not JSON: scan the raw body.
+  }
+  return text.replace(instructions, '').replace(PREAMBLE, '')
 }

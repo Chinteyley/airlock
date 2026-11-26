@@ -1,6 +1,6 @@
 import { detectOnDevice } from './ai'
 import type { Span } from './lib/detect'
-import { findPatterns, mergeSpans, spansFromEntities } from './lib/detect'
+import { expandSpans, findPatterns, mergeSpans, spansFromEntities } from './lib/detect'
 import { findLeaks, redact } from './lib/vault'
 import fixtures from '../../fixtures/notes.json'
 
@@ -19,6 +19,11 @@ function isSplit(x: string): x is Fixture['split'] {
 
 export const FIXTURES: Fixture[] = fixtures.notes.map((n) => ({ ...n, split: isSplit(n.split) ? n.split : 'tuning' }))
 
+// What patterns alone hold, everywhere each found value appears.
+export function patternSpans(note: string): Span[] {
+  return mergeSpans(expandSpans(note, findPatterns(note)), note)
+}
+
 export interface Scan {
   spans: Span[]
   onDevice: boolean
@@ -30,10 +35,10 @@ export interface Scan {
 export async function scan(note: string, deviceReady: boolean): Promise<Scan> {
   const t0 = performance.now()
   const pattern = findPatterns(note)
-  if (!deviceReady) return { spans: mergeSpans(pattern, note), onDevice: false, ms: Math.round(performance.now() - t0) }
+  if (!deviceReady) return { spans: patternSpans(note), onDevice: false, ms: Math.round(performance.now() - t0) }
   const entities = await detectOnDevice(note)
   return {
-    spans: mergeSpans([...pattern, ...spansFromEntities(note, entities)], note),
+    spans: mergeSpans(expandSpans(note, [...pattern, ...spansFromEntities(note, entities)]), note),
     onDevice: true,
     ms: Math.round(performance.now() - t0),
   }
@@ -54,7 +59,7 @@ export interface AuditRow {
 // sent to the cloud, with patterns alone and with the full on-device scan.
 export async function auditFixture(f: Fixture): Promise<AuditRow> {
   const truth = f.identifiers.map((i) => i.text)
-  const patternOnly = redact(f.text, mergeSpans(findPatterns(f.text), f.text)).redacted
+  const patternOnly = redact(f.text, patternSpans(f.text)).redacted
   const s = await scan(f.text, true)
   const { redacted, entries } = redact(f.text, s.spans)
   return {

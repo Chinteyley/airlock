@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Tokens } from '../components/Marked'
-import { authReady } from '../firebase'
+import { ensureAuth } from '../firebase'
 import type { StoredDraft } from '../history'
 import { watchDrafts } from '../history'
 
@@ -11,9 +11,9 @@ export function HistoryView() {
   useEffect(() => {
     let stop: (() => void) | undefined
     let cancelled = false
-    authReady
+    ensureAuth()
       .then((user) => {
-        if (!cancelled) stop = watchDrafts(user.uid, setDrafts)
+        if (!cancelled) stop = watchDrafts(user.uid, setDrafts, (e) => setError(e.message))
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
     return () => {

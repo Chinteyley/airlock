@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import fixtures from '../../../fixtures/notes.json'
-import { findPatterns, mergeSpans, spansFromEntities } from './detect'
+import { expandSpans, findPatterns, mergeSpans, spansFromEntities } from './detect'
 import { findLeaks, redact, restore, sealText } from './vault'
 
 const NOTE = 'Patient: Maria Delgado, DOB 03/14/1972, cell 559-204-8817. Maria lives with Tomas Delgado in Fresno, CA 93721.'
@@ -57,7 +57,7 @@ describe('review findings', () => {
   test('a held name typed into the task line is sealed before it can be sent', () => {
     const spans = mergeSpans(spansFromEntities(NOTE, [{ text: 'Maria Delgado', kind: 'patient' }]), NOTE)
     const { lookup } = redact(NOTE, spans)
-    expect(sealText('Write a referral for maria delgado', lookup)).toBe('Write a referral for [PATIENT_1]')
+    expect(sealText('Refer MARIA DELGADO; Maria Delgado agrees', lookup)).toBe('Refer [PATIENT_1]; [PATIENT_1] agrees')
   })
 
   test('a name part of a different role keeps its own token', () => {
@@ -77,10 +77,57 @@ describe('review findings', () => {
   })
 })
 
+describe('case and line wraps', () => {
+  test('a held name is held in capitals and across a line break', () => {
+    const text = 'Pt Maria Delgado. Spoke with MARIA by phone. Seen with Maria\nDelgado.'
+    const spans = mergeSpans(spansFromEntities(text, [{ text: 'Maria Delgado', kind: 'patient' }]), text)
+    const { redacted } = redact(text, spans)
+    expect(redacted).toBe('Pt [PATIENT_1]. Spoke with [PATIENT_1] by phone. Seen with [PATIENT_1].')
+  })
+
+  test('a clinician with a credential is not read as a city', () => {
+    expect(findPatterns('Alan Whitcomb, MD').filter((s) => s.kind === 'address')).toEqual([])
+  })
+})
+
+describe('second review', () => {
+  const hold = (text: string, entities: { text: string; kind: string }[]) =>
+    redact(text, mergeSpans(expandSpans(text, [...findPatterns(text), ...spansFromEntities(text, entities)]), text))
+
+  test('lowercase and mixed-case mentions are held too', () => {
+    const { redacted } = hold('Patient: Maria Delgado. maria reports pain. Seen at DaVita Riverbend (DAVITA RIVERBEND).', [
+      { text: 'Maria Delgado', kind: 'patient' },
+      { text: 'DaVita Riverbend', kind: 'organization' },
+    ])
+    expect(redacted).toBe('Patient: [PATIENT_1]. [PATIENT_1] reports pain. Seen at [ORG_1] ([ORG_1]).')
+  })
+
+  test('two-letter names and each half of a hyphenated surname are held', () => {
+    const { redacted } = hold('Bo Chen saw Dr. Patel-Ramos. Bo agreed; Ramos will call.', [
+      { text: 'Bo Chen', kind: 'patient' },
+      { text: 'Patel-Ramos', kind: 'clinician' },
+    ])
+    expect(redacted).not.toMatch(/\bBo\b|Ramos/)
+  })
+
+  test('a value patterns found once is held everywhere it appears', () => {
+    const { redacted } = hold('Lives with her husband Tomas. Safety plan reviewed with Tomas.', [])
+    expect(redacted).toBe('Lives with her husband [RELATIVE_1]. Safety plan reviewed with [RELATIVE_1].')
+  })
+
+  test('a held word never matches inside a token', () => {
+    const { redacted, lookup } = hold('Visit 11/24/2026. Patient: Kenji Date.', [{ text: 'Kenji Date', kind: 'patient' }])
+    expect(sealText('Follow up on 11/24/2026 with Date', lookup)).toBe('Follow up on [DATE_1] with [PATIENT_1]')
+    expect(findLeaks(redacted, ['Date', 'Kenji Date'])).toEqual([])
+  })
+})
+
 describe('leak scan', () => {
-  test('matches whole words only, case-insensitively, inside JSON strings', () => {
+  test('matches whole words as written, in capitals or title case, inside JSON strings', () => {
     expect(findLeaks('{"text":"James played games"}', ['Ames'])).toEqual([])
-    expect(findLeaks('{"text":"lives in ames"}', ['Ames'])).toEqual(['ames'])
+    expect(findLeaks('{"text":"lives in AMES"}', ['Ames'])).toEqual(['ames'])
+    expect(findLeaks('{"text":"you will never see"}', ['Will'])).toEqual([])
+    expect(findLeaks('{"text":"Seen with Maria\\nDelgado"}', ['Maria Delgado'])).toEqual(['maria delgado'])
     expect(findLeaks('{"text":"St. Brigid Children\\u0027s Hospital"}', ["St. Brigid Children's Hospital"])).toHaveLength(1)
   })
 })

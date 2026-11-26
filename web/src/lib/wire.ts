@@ -7,6 +7,8 @@ export interface WireRecord {
   at: number
   url: string
   body: string
+  // HTTP status once the response arrives; 0 when the request itself failed.
+  status: number | null
 }
 
 const AI_HOSTS = ['firebasevertexai.googleapis.com', 'generativelanguage.googleapis.com']
@@ -32,13 +34,24 @@ function bodyText(body: BodyInit | null | undefined): string {
 export function installWire() {
   const original = window.fetch.bind(window)
   if ((window.fetch as { __airlock?: boolean }).__airlock) return
-  const wrapped = (input: RequestInfo | URL, init?: RequestInit) => {
+  const update = (id: number, status: number) => {
+    records = records.map((r) => (r.id === id ? { ...r, status } : r))
+    for (const l of listeners) l(records)
+  }
+  const wrapped = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = urlOf(input)
-    if (AI_HOSTS.some((h) => url.includes(h))) {
-      records = [...records, { id: nextId++, at: Date.now(), url, body: bodyText(init?.body) }]
-      for (const l of listeners) l(records)
+    if (!AI_HOSTS.some((h) => url.includes(h))) return original(input, init)
+    const id = nextId++
+    records = [...records, { id, at: Date.now(), url, body: bodyText(init?.body), status: null }]
+    for (const l of listeners) l(records)
+    try {
+      const res = await original(input, init)
+      update(id, res.status)
+      return res
+    } catch (e) {
+      update(id, 0)
+      throw e
     }
-    return original(input, init)
   }
   Object.assign(wrapped, { __airlock: true })
   window.fetch = wrapped

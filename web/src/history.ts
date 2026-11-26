@@ -4,7 +4,7 @@
 
 import type { Timestamp } from 'firebase/firestore'
 import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore'
-import { authReady, db } from './firebase'
+import { db, ensureAuth } from './firebase'
 import { findLeaks } from './lib/vault'
 
 export interface DraftRecord {
@@ -29,18 +29,24 @@ export async function sha256(text: string): Promise<string> {
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-// Refuses to write a record that contains any held value.
+// Refuses to write a record whose text contains any held value.
 export async function saveDraft(record: DraftRecord, heldValues: string[]): Promise<string> {
-  const leaks = findLeaks(JSON.stringify(record), heldValues)
+  const leaks = findLeaks([record.title, record.redactedNote, record.redactedLetter].join('\n'), heldValues)
   if (leaks.length > 0) throw new Error(`Refusing to store: ${leaks.length} held values found in the record.`)
-  const user = await authReady
+  const user = await ensureAuth()
   const ref = await addDoc(collection(db, 'users', user.uid, 'drafts'), { ...record, createdAt: serverTimestamp() })
   return ref.id
 }
 
-export function watchDrafts(uid: string, onChange: (drafts: StoredDraft[]) => void): () => void {
+export function watchDrafts(
+  uid: string,
+  onChange: (drafts: StoredDraft[]) => void,
+  onError: (e: Error) => void,
+): () => void {
   const q = query(collection(db, 'users', uid, 'drafts'), orderBy('createdAt', 'desc'), limit(25))
-  return onSnapshot(q, (snap) => {
-    onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredDraft, 'id'>) })))
-  })
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredDraft, 'id'>) }))),
+    onError,
+  )
 }

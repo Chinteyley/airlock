@@ -9,7 +9,7 @@ Airlock uses both, for the job each one is good at:
 1. **The on-device model finds every identifier.** Gemini Nano in Chrome reads the raw note and lists every person, relative, clinician, facility and place. Pattern detectors catch phones, emails, record numbers and dates. Nothing in this step can reach the cloud.
 2. **The clinician reviews.** Held identifiers are highlighted; click one to release it, select text to hold something the scan missed.
 3. **Only tokens leave.** Each identifier becomes a typed token (`[PATIENT_1]`, `[CLINICIAN_1]`, `[DOB_1] (age 54)`), and the cloud model drafts the letter from that redacted note.
-4. **Airlock proves it.** The app captures the literal body of the request where the Firebase SDK sends it, and searches it for every held value. The wire panel shows that body and the count: *0 of 17 held*.
+4. **Airlock proves it.** Before sending, the full prompt is checked for every held value (and any name typed into the task line), and Send stays locked until the count is zero. After sending, the app captures the literal body of the request where the Firebase SDK calls `fetch` and checks it again. The wire panel shows that body, its HTTP status and the count: *0 of 17 held*.
 5. **Names come back on the device.** Tokens are swapped back for real values locally, by plain string substitution, not by a model.
 
 Try it: **https://airlock-hybrid-2026.web.app** (Chrome on desktop; see [Testing](#testing)).
@@ -21,7 +21,7 @@ Airlock uses three inference modes, and each choice is a privacy decision, not a
 | Job | Mode | Why |
 | --- | --- | --- |
 | Find identifiers in the raw note | `ONLY_ON_DEVICE`, JSON-constrained output | The raw note must never be a cloud request. If no on-device model is ready, this step fails and Airlock **stays sealed**: patterns plus a mandatory manual review stand in, and the raw note is never sent instead. The response's `inferenceSource` is checked, and detection refuses any result that didn't run on the device. |
-| Draft the letter from the redacted note | `PREFER_IN_CLOUD` (model from Remote Config) | Letters are better from a cloud model, and the input holds only tokens. When the cloud is unreachable or overloaded, the SDK drafts on-device instead, and the wire panel shows that no request left. |
+| Draft the letter from the redacted note | `PREFER_IN_CLOUD` (model from Remote Config) | Letters are better from a cloud model, and the input holds only tokens. When the cloud request fails (offline, overloaded, a bad model name), the SDK drafts on-device instead; the wire panel shows the attempted request with its status. |
 | Audit detection on labeled notes | `ONLY_ON_DEVICE` | Measures, on the user's own machine, how many labeled identifiers would still reach the cloud. |
 
 Code: [`web/src/ai.ts`](web/src/ai.ts) (models), [`web/src/lib/detect.ts`](web/src/lib/detect.ts) (patterns and span merging), [`web/src/lib/vault.ts`](web/src/lib/vault.ts) (tokens, restore, leak scan), [`web/src/lib/wire.ts`](web/src/lib/wire.ts) (request capture).
@@ -31,20 +31,20 @@ Code: [`web/src/ai.ts`](web/src/ai.ts) (models), [`web/src/lib/detect.ts`](web/s
 - **Firebase AI Logic** (Gemini Developer API) with hybrid inference on Chrome's Prompt API (Gemini Nano).
 - **App Check**, enforced for AI Logic: Fraud Defense (reCAPTCHA Enterprise) on the hosted app, the debug provider in local development.
 - **Authentication**: anonymous sign-in scopes each user's history.
-- **Cloud Firestore**: stores the redacted note and the letter as the cloud wrote it, tokens and all. Before writing, Airlock scans the record for every held value and refuses to store it if one is found. Security rules allow each user only their own records and only the redacted fields.
+- **Cloud Firestore**: stores the redacted note and the letter as the cloud wrote it, tokens and all: the same text that already went to the cloud, nothing more. Before writing, Airlock scans the record for every held value and refuses to store it if one is found. Security rules allow each user only their own records, only the redacted fields, and only records with zero leaked values.
 - **Remote Config**: the policy name, the cloud drafting model and the drafting instructions, so an organization can change them without a release.
 - **Hosting**: https://airlock-hybrid-2026.web.app.
 
 ## Measured
 
-The Audit tab runs every note in [`fixtures/notes.json`](fixtures/notes.json) through the on-device scan and checks the text that would go to the cloud for each labeled identifier. One run on an M3 Pro MacBook Pro, Chrome 158, Nov 26, 2026:
+The Audit tab runs every note in [`fixtures/notes.json`](fixtures/notes.json) through the on-device scan and checks the text that would go to the cloud for each labeled identifier. One run on an M3 Pro MacBook Pro, Chrome 158, Nov 26, 2026 (10:55 PM local):
 
 | Notes | Labeled identifiers | Leaked with Airlock | Leaked with patterns alone |
 | --- | --- | --- | --- |
-| 10 tuning notes | 128 | 0 | 53 |
-| 5 held-out notes | 65 | 0 | 40 |
+| 10 tuning notes | 128 | 0 | 49 |
+| 5 held-out notes | 65 | 0 | 41 |
 
-Mean on-device scan time: 7.0 s per note. The tuning notes were used while writing the detection prompt and the pattern backstops; the held-out notes were written afterwards and never used for tuning. All notes are synthetic: every person, place and number in them is invented. A small model can still miss an identifier in a note unlike these, which is why the review step exists and why the wire panel checks the real request.
+Mean on-device scan time: 6.5 s per note. The tuning notes were used while writing the detection prompt and the pattern backstops; the held-out notes were written afterwards and not used for tuning, with one exception: after a code review pointed out that "Chart number 00-4417-82" in a held-out note had no matching pattern label, labels for chart, case, file and claim numbers were added. All notes are synthetic: every person, place and number in them is invented. A small model can still miss an identifier in a note unlike these, which is why the review step exists and why the wire panel checks the real request.
 
 ## Run it locally
 

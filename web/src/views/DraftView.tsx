@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Draft, DeviceState } from '../ai'
-import { buildDraftPrompt, draftLetter } from '../ai'
+import { buildDraftPrompt, detectOnDevice, draftLetter, userTextOf } from '../ai'
 import { HeldNote, Tokens } from '../components/Marked'
 import { kindName } from '../lib/kinds'
 import type { Policy } from '../firebase'
 import { saveDraft, sha256 } from '../history'
 import type { Span } from '../lib/detect'
-import { mergeSpans, spansFromEntities } from '../lib/detect'
+import { findPatterns, mergeSpans, nameParts, PERSON_KINDS, spansFromEntities } from '../lib/detect'
+import { TOKEN_RE } from '../lib/vault'
 import type { VaultEntry } from '../lib/vault'
 import { findLeaks, redact, restore, sealText } from '../lib/vault'
 import type { WireRecord } from '../lib/wire'
 import { lastWireId, wireSince } from '../lib/wire'
-import { FIXTURES, scan } from '../pipeline'
+import { FIXTURES, patternSpans, scan } from '../pipeline'
 
 type Phase = 'edit' | 'scanning' | 'review' | 'sending' | 'done'
 
@@ -25,9 +26,23 @@ interface Sent {
 
 type Saved = { state: 'saving' } | { state: 'saved' } | { state: 'failed'; error: string }
 
-// Checks each captured body on its own, so one body's JSON escaping can't hide a match.
-function leaksIn(wire: WireRecord[], values: string[]): string[] {
-  return [...new Set(wire.flatMap((w) => findLeaks(w.body, values)))]
+// Checks the user's text in each captured body on its own (Airlock's fixed
+// wording is left out, so a held "Will" isn't matched in "you will never see").
+function leaksIn(wire: WireRecord[], values: string[], instructions: string): string[] {
+  return [...new Set(wire.flatMap((w) => findLeaks(userTextOf(w.body, instructions), values)))]
+}
+
+const PROPER_NOUN = /(?:^|\s)\p{Lu}/u
+
+// Names, numbers and places typed into the task line that the note scan never saw.
+async function unheldInTask(sealedTask: string, deviceReady: boolean): Promise<string[]> {
+  const plain = sealedTask.replace(TOKEN_RE, ' ')
+  const found = findPatterns(plain).map((s) => s.text)
+  if (deviceReady) {
+    const entities = await detectOnDevice(plain)
+    found.push(...entities.map((e) => e.text.trim()).filter((t) => PROPER_NOUN.test(t) && plain.includes(t)))
+  }
+  return [...new Set(found)]
 }
 
 function prettyBody(body: string): string {
@@ -43,7 +58,7 @@ function endpointOf(url: string): string {
   return `${u.host}${u.pathname}`
 }
 
-export function DraftView({ device, policy }: { device: DeviceState; policy: Policy | null }) {
+export function DraftView({ device, policy }: { device: DeviceState; policy: Policy }) {
   const [fixtureId, setFixtureId] = useState(FIXTURES[0].id)
   const [note, setNote] = useState(FIXTURES[0].text)
   const [task, setTask] = useState(FIXTURES[0].task)
@@ -57,21 +72,32 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   const [saved, setSaved] = useState<Saved | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showRestored, setShowRestored] = useState(true)
+  // Bumped on every send and reset, so a late history save can't update a newer draft.
+  const run = useRef(0)
 
   const redaction = useMemo(() => redact(note, spans), [note, spans])
-  const heldValues = useMemo(() => [...new Set(spans.map((s) => s.text))], [spans])
+  // Every held string, plus each part of a held name, is searched for in what goes out.
+  const heldValues = useMemo(
+    () => [...new Set(spans.flatMap((s) => [s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])]))],
+    [spans],
+  )
   const kindCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const e of redaction.entries) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1)
     return [...counts]
   }, [redaction])
   const restoration = useMemo(() => (sent ? restore(sent.draft.text, sent.entries) : null), [sent])
+  const sealedTask = useMemo(() => sealText(task, redaction.lookup), [task, redaction])
   // The exact prompt the SDK will send: redacted note, sealed task, instructions.
   const outbound = useMemo(
-    () => (policy ? buildDraftPrompt(redaction.redacted, sealText(task, redaction.lookup), policy.draftInstructions) : ''),
-    [policy, redaction, task],
+    () => buildDraftPrompt(redaction.redacted, sealedTask, policy.draftInstructions),
+    [policy, redaction, sealedTask],
   )
-  const preflightLeaks = useMemo(() => findLeaks(outbound, heldValues), [outbound, heldValues])
+  // Only the user's text is checked; Airlock's fixed wording names no one.
+  const preflightLeaks = useMemo(
+    () => findLeaks(`${redaction.redacted}\n${sealedTask}`, heldValues),
+    [redaction, sealedTask, heldValues],
+  )
 
   const pickFixture = (id: string) => {
     const f = FIXTURES.find((x) => x.id === id)
@@ -83,6 +109,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   }
 
   const reset = () => {
+    run.current += 1
     setPhase('edit')
     setSpans([])
     setSent(null)
@@ -103,14 +130,19 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
       setScanMs(s.ms)
       setPhase('review')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-      setPhase('edit')
+      // The on-device scan failed: stay sealed and fall back to patterns plus review.
+      setError(`On-device scan failed (${e instanceof Error ? e.message : String(e)}). Continuing sealed.`)
+      setSealed(true)
+      setSpans(patternSpans(note))
+      setPhase('review')
     }
   }
 
+  // Releasing a name also releases its parts held elsewhere ("Maria" with "Maria Delgado").
   const release = (s: Span) => {
     if (phase !== 'review') return
-    setSpans((all) => all.filter((x) => x.text.toLowerCase() !== s.text.toLowerCase()))
+    const gone = new Set([s.text, ...(PERSON_KINDS.has(s.kind) ? nameParts(s.text) : [])].map((t) => t.toLowerCase()))
+    setSpans((all) => all.filter((x) => !gone.has(x.text.toLowerCase())))
   }
 
   const holdSelection = () => {
@@ -127,43 +159,59 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
   }
 
   const send = async () => {
-    if (!policy || preflightLeaks.length > 0) return
+    if (preflightLeaks.length > 0) return
+    run.current += 1
+    const thisRun = run.current
     setPhase('sending')
     setError(null)
     const entries = redaction.entries
-    const since = lastWireId()
     try {
+      const unheld = await unheldInTask(sealedTask, device === 'ready' && !sealed)
+      if (unheld.length > 0) {
+        setError(`The task line names ${unheld.join(', ')}. Take it out of the task, or put it in the note and scan again.`)
+        setPhase('review')
+        return
+      }
+      const since = lastWireId()
       const draft = await draftLetter(outbound, policy.draftModel)
       const wire = wireSince(since)
-      const leaks = leaksIn(wire, heldValues)
+      const leaks = leaksIn(wire, heldValues, policy.draftInstructions)
+      if (thisRun !== run.current) return
       setSent({ draft, entries, wire, leaks })
       setPhase('done')
       // History syncs on its own; the letter never waits for it.
       setSaved({ state: 'saving' })
-      const payload = wire.map((w) => w.body).join('\n')
-      saveDraft(
-        {
-          title: FIXTURES.find((f) => f.id === fixtureId)?.title ?? 'Referral letter',
-          platform: 'web',
-          redactedNote: redaction.redacted,
-          redactedLetter: draft.text,
-          held: entries.length,
-          leaked: leaks.length,
-          detectedOn: sealed ? 'patterns-only' : 'on-device',
-          draftedOn: draft.source,
-          payloadSha256: wire.length ? await sha256(payload) : null,
-        },
-        heldValues,
-      )
-        .then(() => setSaved({ state: 'saved' }))
-        .catch((e: unknown) => setSaved({ state: 'failed', error: e instanceof Error ? e.message : String(e) }))
+      const save = async () => {
+        const payload = wire.map((w) => w.body).join('\n')
+        await saveDraft(
+          {
+            title: FIXTURES.find((f) => f.id === fixtureId && f.text === note)?.title ?? 'Referral letter',
+            platform: 'web',
+            redactedNote: redaction.redacted,
+            redactedLetter: draft.text,
+            held: entries.length,
+            leaked: leaks.length,
+            detectedOn: sealed ? 'patterns-only' : 'on-device',
+            draftedOn: draft.source,
+            payloadSha256: wire.length && crypto.subtle ? await sha256(payload) : null,
+          },
+          heldValues,
+        )
+      }
+      save()
+        .then(() => thisRun === run.current && setSaved({ state: 'saved' }))
+        .catch(
+          (e: unknown) =>
+            thisRun === run.current && setSaved({ state: 'failed', error: e instanceof Error ? e.message : String(e) }),
+        )
     } catch (e) {
+      if (thisRun !== run.current) return
       setError(e instanceof Error ? e.message : String(e))
       setPhase('review')
     }
   }
 
-  const canSend = phase === 'review' && policy !== null && preflightLeaks.length === 0 && (!sealed || reviewed)
+  const canSend = phase === 'review' && preflightLeaks.length === 0 && (!sealed || reviewed)
   const lastWire = sent?.wire.at(-1)
 
   return (
@@ -223,7 +271,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
         </div>
         <div className="col-foot">
           {phase === 'edit' && (
-            <button type="button" className="btn primary" onClick={runScan} disabled={!note.trim()}>
+            <button type="button" className="btn primary" onClick={runScan} disabled={!note.trim() || device === 'checking'}>
               Scan on this device
             </button>
           )}
@@ -276,13 +324,19 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
                 </div>
               )}
               {sent && !lastWire && (
-                <div className="banner ok">
-                  No request left this device: the cloud was unreachable, so the letter was drafted on-device.
+                <div className="banner ok">No request left this device: the letter was drafted on-device.</div>
+              )}
+              {sent && lastWire && sent.draft.source === 'ON_DEVICE' && (
+                <div className="banner warn">
+                  The cloud request {lastWire.status ? `failed (${lastWire.status})` : 'could not connect'}, so the
+                  letter was drafted on this device. The request below is what was attempted.
                 </div>
               )}
               {lastWire ? (
                 <>
-                  <div className="endpoint">POST {endpointOf(lastWire.url)}</div>
+                  <div className="endpoint">
+                    POST {endpointOf(lastWire.url)} → {lastWire.status === null ? '…' : lastWire.status || 'failed'}
+                  </div>
                   <div className="payload">
                     <Tokens text={prettyBody(lastWire.body)} />
                   </div>
@@ -320,7 +374,7 @@ export function DraftView({ device, policy }: { device: DeviceState; policy: Pol
           <span className="col-title">The letter</span>
           {sent && (
             <span className={`badge ${sent.draft.source === 'IN_CLOUD' ? 'cloud' : 'held'}`}>
-              {sent.draft.source} · {sent.draft.source === 'IN_CLOUD' ? policy?.draftModel : 'Gemini Nano'}
+              {sent.draft.source} · {sent.draft.source === 'IN_CLOUD' ? policy.draftModel : 'Gemini Nano'}
             </span>
           )}
           <span className="spacer" />
