@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCqsSYaKSWSKM4QMS7m2zD7R3HlWepXs_8</string>
+	<string>AIzaSyC1oTpN4st3vEawseYm4f0gNhoNJapdelA</string>
 	<key>GCM_SENDER_ID</key>
-	<string>715775426095</string>
+	<string>1040733446367</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>app.airlock.hybrid</string>
 	<key>PROJECT_ID</key>
-	<string>airlock-hybrid-2026</string>
+	<string>fb-ailogic26vrt-3303</string>
 	<key>STORAGE_BUCKET</key>
-	<string>airlock-hybrid-2026.firebasestorage.app</string>
+	<string>fb-ailogic26vrt-3303.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:715775426095:ios:a337c57954a9fdec2c90da</string>
+	<string>1:1040733446367:ios:e531493ef784abbc80496a</string>
 </dict>
 </plist>
