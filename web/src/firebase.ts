@@ -7,15 +7,15 @@ import { fetchAndActivate, getRemoteConfig, getValue } from 'firebase/remote-con
 
 // Public web config: these values identify the project, they are not secrets.
 const firebaseConfig = {
-  apiKey: 'AIzaSyDwzeLTGNPDC04q8wDSQxfXyWWZxgCU0ns',
-  authDomain: 'airlock-hybrid-2026.firebaseapp.com',
-  projectId: 'airlock-hybrid-2026',
-  storageBucket: 'airlock-hybrid-2026.firebasestorage.app',
-  messagingSenderId: '715775426095',
-  appId: '1:715775426095:web:271a71534c353fd52c90da',
+  apiKey: 'AIzaSyB8T4G6frizweaXlcU1U0KF8DYk5QlGl1c',
+  authDomain: 'fb-ailogic26vrt-3303.firebaseapp.com',
+  projectId: 'fb-ailogic26vrt-3303',
+  storageBucket: 'fb-ailogic26vrt-3303.firebasestorage.app',
+  messagingSenderId: '1040733446367',
+  appId: '1:1040733446367:web:d894b3517abb5ee880496a',
 }
 
-const RECAPTCHA_SITE_KEY = '6LdPgTMuAAAAANlymLT0s1NgKfMy0go-7e-x2uIq'
+const RECAPTCHA_SITE_KEY = '6LeFhTQuAAAAAK_ia3Af2ffGUO2Gr03DyvqwbL_4'
 
 export const app = initializeApp(firebaseConfig)
 
